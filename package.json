@@ -1,0 +1,13 @@
+{
+  "name": "data-governance-copilot",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter ui dev",
+    "build": "pnpm --filter ui build",
+    "preview": "pnpm --filter ui preview",
+    "lint": "pnpm --filter ui lint",
+    "format": "pnpm --filter ui format",
+    "test": "pnpm --filter ui test"
+  }
+}

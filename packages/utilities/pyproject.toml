@@ -1,0 +1,7 @@
+[build-system]
+requires = ["setuptools, "setuptools-scm"] # Specify setuptools as a build dependency
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "utilities"
+version = "0.0.1"
