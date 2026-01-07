@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgvector-init-script
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: pgvector
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: Helm
+data:
+  init-vector.sh: |
+    #!/bin/bash
+    set -e
+
+    echo "Creating vector extension..."
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRESQL_USER" --dbname "$POSTGRESQL_DATABASE" <<-EOSQL
+      CREATE EXTENSION IF NOT EXISTS vector CASCADE;
+    EOSQL
+
+    echo "Vector extension created successfully"
