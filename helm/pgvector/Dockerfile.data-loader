@@ -1,0 +1,22 @@
+FROM registry.access.redhat.com/ubi9/python-311:latest
+
+# Switch to root to install packages and copy files
+USER root
+
+# Install required Python packages
+RUN pip install --no-cache-dir pandas psycopg2-binary
+
+# Create directories
+RUN mkdir -p /data /scripts && chown -R 1001:0 /data /scripts && chmod -R g=u /data /scripts
+
+# Copy CSV data files from local data directory
+COPY data/*.csv /data/
+
+# Copy the loading script
+COPY scripts/load_data.py /scripts/load_data.py
+RUN chmod +x /scripts/load_data.py
+
+# Switch back to non-root user for OpenShift compatibility
+USER 1001
+
+CMD ["python3", "/scripts/load_data.py"]

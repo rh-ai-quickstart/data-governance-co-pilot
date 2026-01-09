@@ -1,0 +1,16 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: pgvector-data-loader
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: pgvector-data-loader:latest
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile.data-loader
+  triggers: []

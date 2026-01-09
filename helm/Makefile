@@ -19,10 +19,10 @@ MINIMUM_PASSWORD_LENGTH = 8
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  install       - Installs recommender system and supporting resources"
+	@echo "  install       - Installs quickstart and supporting resources"
 	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, minio.userId, minio.password"
 	@echo "                  Example: make install NAMESPACE=myns postgres.userId=postgres postgres.password=pass123 postgres.databaseName=recsys minio.userId=minio minio.password=minio123"
-	@echo "  uninstall     - Uninstall the recommender system app and clean up resources"
+	@echo "  uninstall     - Uninstalls the quickstart and clean up resources"
 	@echo ""
 	@echo "Configuration options (set via environment variables or make arguments):"
 	@echo "  NAMESPACE                - Target namespace (required)"
@@ -81,11 +81,11 @@ namespace:
 	@oc project $(NAMESPACE) &> /dev/null ||:
 
 .PHONY: install
-install: check-oc-version check-minio-credentials check-postgres-credentials namespace minio-install
+install: check-oc-version check-minio-credentials check-postgres-credentials namespace minio-install database-install
 
 .PHONY: minio-install
 minio-install:
-	@echo "Installing Minio helm chart and default bucket for recommender pipeline..."
+	@echo "Installing Minio helm chart and default bucket ..."
 	@helm -n $(NAMESPACE) upgrade --install minio $(MINIO_CHART) \
 		--set minio.userId=$(minio.userId) \
 		--set minio.password=$(minio.password) \
@@ -96,28 +96,46 @@ minio-install:
 		route/minio-api -n $(NAMESPACE) --timeout=60s
 	@echo "Minio installation complete."
 
+.PHONY: build-data-loader-image
+build-data-loader-image:
+	@echo "Creating ImageStream for data loader..."
+	@oc create imagestream pgvector-data-loader -n $(NAMESPACE) 2>/dev/null || echo "ImageStream already exists"
+	@echo "Creating/updating BuildConfig for data loader..."
+	@oc apply -f $(POSTGRES_CHART)/buildconfig.yaml -n $(NAMESPACE)
+	@echo "Starting binary build (uploading CSV files and scripts to OpenShift)..."
+	@echo "This will upload ~45MB of data files..."
+	@cd $(POSTGRES_CHART) && oc start-build pgvector-data-loader --from-dir=. --follow -n $(NAMESPACE)
+	@echo "Data loader image built successfully in OpenShift internal registry"
+
 .PHONY: database-install
-database-install:
+database-install: build-data-loader-image
 	@echo "Installing, configuring and loading Postgres database ..."
 	@helm -n $(NAMESPACE) upgrade --install postgres $(POSTGRES_CHART) \
 		--set postgres.userId=$(postgres.userId) \
 		--set postgres.password=$(postgres.password) \
 		--set postgres.databaseName=$(postgres.databaseName) \
-		--timeout 5m
-	@echo "Database installation complete."
+		--timeout 10m
+	@echo "Waiting for data loading job to complete..."
+	@oc wait --for=condition=complete --timeout=600s job/pgvector-data-loader -n $(NAMESPACE) || \
+		(echo "Data loading job failed or timed out. Check logs with: oc logs job/pgvector-data-loader -n $(NAMESPACE)" && exit 1)
+	@echo "Database installation and data loading complete."
 
 .PHONY: uninstall
-uninstall: check-oc-version minio-uninstall delete-project
+uninstall: check-oc-version minio-uninstall database-uninstall delete-project
 
 .PHONY: minio-uninstall
 minio-uninstall:
 	@echo "Uninstalling Minio helm chart"
 	@helm -n $(NAMESPACE) uninstall minio || true
-	@echo "Removing pgvector and minio PVCs from $(NAMESPACE)"
-	@oc get pvc -n $(NAMESPACE) -o custom-columns=NAME:.metadata.name | grep -E '^(pg|minio)-data' | xargs -I {} oc delete pvc -n $(NAMESPACE) {} ||:
-	@echo "Checking for any remaining resources in namespace $(NAMESPACE)..."
-	@echo "Remaining resources in namespace $(NAMESPACE):"
-	@$(MAKE) status
+	@echo "Removing minio PVCs from $(NAMESPACE)"
+	@oc get pvc -n $(NAMESPACE) -o custom-columns=NAME:.metadata.name | grep -E '^(minio)-data' | xargs -I {} oc delete pvc -n $(NAMESPACE) {} ||:
+
+.PHONY: database-uninstall
+database-uninstall:
+	@echo "Uninstalling Postgres helm chart"
+	@helm -n $(NAMESPACE) uninstall postgres || true
+	@echo "Removing Postgres PVCs from $(NAMESPACE)"
+	@oc get pvc -n $(NAMESPACE) -o custom-columns=NAME:.metadata.name | grep -E '^(pgvector)-data' | xargs -I {} oc delete pvc -n $(NAMESPACE) {} ||:
 
 .PHONY: delete-project
 delete-project:

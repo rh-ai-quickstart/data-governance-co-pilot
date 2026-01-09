@@ -1,0 +1,12 @@
+# Ignore data files - only used for building the data-loader image
+data/
+
+# Ignore Dockerfile and BuildConfig - not part of the Helm chart
+Dockerfile.data-loader
+buildconfig.yaml
+
+# Ignore scripts - embedded in the data-loader image
+scripts/
+
+# Ignore README
+README.md
