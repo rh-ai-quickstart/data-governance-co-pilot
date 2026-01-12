@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgadmin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: pgadmin
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pgadmin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pgadmin
+    spec:
+      # Use dedicated service account for pgAdmin with anyuid SCC
+      serviceAccountName: pgadmin
+      # Allow privilege escalation for pgAdmin's Python virtual environment
+      securityContext:
+        fsGroup: 5050
+      containers:
+        - name: pgadmin
+          image: dpage/pgadmin4:latest
+          imagePullPolicy: IfNotPresent
+          # Security context required for pgAdmin to run properly
+          securityContext:
+            allowPrivilegeEscalation: true
+            runAsUser: 5050
+          ports:
+            - containerPort: 80
+              protocol: TCP
+              name: http
+          env:
+            # pgAdmin login credentials from secret
+            - name: PGADMIN_DEFAULT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: pgadmin-secret
+                  key: PGADMIN_DEFAULT_EMAIL
+            - name: PGADMIN_DEFAULT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pgadmin-secret
+                  key: PGADMIN_DEFAULT_PASSWORD
+            # PostgreSQL connection info (used by servers.json)
+            - name: PGADMIN_CONFIG_SERVER_MODE
+              value: "False"
+            - name: PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED
+              value: "False"
+          volumeMounts:
+            # Persistent storage for pgAdmin settings and preferences
+            - name: pgadmin-data
+              mountPath: /var/lib/pgadmin
+            # Pre-configured server connection
+            - name: pgadmin-config
+              mountPath: /pgadmin4/servers.json
+              subPath: servers.json
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /misc/ping
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /misc/ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: pgadmin-data
+          persistentVolumeClaim:
+            claimName: pgadmin-data
+        - name: pgadmin-config
+          configMap:
+            name: pgadmin-config

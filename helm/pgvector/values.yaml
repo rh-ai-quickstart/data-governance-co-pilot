@@ -1,9 +1,9 @@
 applicationName: pgvector
 
 postgres:
-  userId: <this is used to set the user id for the minio installation> # provide this when calling make (e.g., make install postgres.userId=john01)
-  password: <this is used to set the password for the minio installation> # provide this wen calling make (e.g., make install postgres.password=letmein);
-  databaseName: <this is used to set the databaseName for the database installation> # provide this wen calling make (e.g., make install postgres.databaseName=postgres);
+  userId: <postgres user id> # provide this when calling make (e.g., make install postgres.userId=postgres)
+  password: <postgres password> # provide this when calling make (e.g., make install postgres.password=secret123)
+  databaseName: <postgres database name> # provide this when calling make (e.g., make install postgres.databaseName=ecommerce)
 
 dataLoader:
   # Image defaults to OpenShift internal registry: image-registry.openshift-image-registry.svc:5000/<namespace>/pgvector-data-loader:latest

@@ -1,0 +1,16 @@
+applicationName: pgadmin
+
+pgadmin:
+  email: <pgAdmin login email> # provide this when calling make (e.g., make install pgadmin.email=admin@example.com)
+  password: <pgAdmin login password> # provide this when calling make (e.g., make install pgadmin.password=admin123)
+
+# PostgreSQL connection details - passed from the pgvector chart via Makefile
+postgres:
+  host: pgvector-0.pgvector-postgres-service
+  port: 5432
+  user: <postgres userId> # provided via postgres.userId parameter
+  password: <postgres password>
+  database: <postgres database>
+
+storage:
+  size: 1Gi

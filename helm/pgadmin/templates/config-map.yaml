@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgadmin-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: pgadmin
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: Helm
+data:
+  # Pre-configure the pgvector database connection
+  # This creates a server entry that appears automatically in pgAdmin UI
+  servers.json: |
+    {
+      "Servers": {
+        "1": {
+          "Name": "PGVector Database",
+          "Group": "Servers",
+          "Host": "{{ .Values.postgres.host }}.{{ .Release.Namespace }}.svc.cluster.local",
+          "Port": {{ .Values.postgres.port }},
+          "MaintenanceDB": "postgres",
+          "Username": "{{ .Values.postgres.user }}",
+          "SSLMode": "prefer",
+          "Comment": "Auto-configured connection to pgvector database"
+        }
+      }
+    }

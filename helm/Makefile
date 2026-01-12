@@ -10,6 +10,8 @@ MAKEFLAGS += --no-print-directory
 
 MINIO_CHART := minio
 POSTGRES_CHART := pgvector
+# pgAdmin chart for database administration UI
+PGADMIN_CHART := pgadmin
 
 MINIMUM_OC_VERSION = "4.17.0"
 MINIMUM_USERID_LENGTH = 3
@@ -20,17 +22,19 @@ MINIMUM_PASSWORD_LENGTH = 8
 help:
 	@echo "Available targets:"
 	@echo "  install       - Installs quickstart and supporting resources"
-	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, minio.userId, minio.password"
-	@echo "                  Example: make install NAMESPACE=myns postgres.userId=postgres postgres.password=pass123 postgres.databaseName=recsys minio.userId=minio minio.password=minio123"
+	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, minio.userId, minio.password, pgadmin.email, pgadmin.password"
+	@echo "                  Example: make install NAMESPACE=myns postgres.userId=postgres postgres.password=pass123 postgres.databaseName=recsys minio.userId=minio minio.password=minio123 pgadmin.email=admin@example.com pgadmin.password=admin123"
 	@echo "  uninstall     - Uninstalls the quickstart and clean up resources"
 	@echo ""
 	@echo "Configuration options (set via environment variables or make arguments):"
 	@echo "  NAMESPACE                - Target namespace (required)"
-	@echo "  postgres.userId          - PostgreSQL userId (required)"
+	@echo "  postgres.userId          - PostgreSQL user ID (required)"
 	@echo "  postgres.password        - PostgreSQL password (required)"
 	@echo "  postgres.databaseName    - PostgreSQL database name (required)"
 	@echo "  minio.userId             - User ID to use for minio installation (required)"
 	@echo "  minio.password           - Password to use for minio installation (required)"
+	@echo "  pgadmin.email            - pgAdmin login email (required)"
+	@echo "  pgadmin.password         - pgAdmin login password (required)"
 
 # Older version of oc will raise error processing some of the commands in this make file; enforce a minimum version
 .PHONY: check-oc-version
@@ -75,13 +79,25 @@ check-postgres-credentials:
 		exit 1; \
 	fi
 
+# Validation for pgAdmin credentials
+.PHONY: check-pgadmin-credentials
+check-pgadmin-credentials:
+	@if [ -z "$(pgadmin.email)" ]; then \
+		echo "Error: pgadmin.email must be set."; \
+		exit 1; \
+	fi
+	@if [ -z "$(pgadmin.password)" ]; then \
+		echo "Error: pgadmin.password must be set."; \
+		exit 1; \
+	fi
+
 .PHONY: namespace
 namespace:
 	@oc create namespace $(NAMESPACE) &> /dev/null && oc label namespace $(NAMESPACE) modelmesh-enabled=false ||:
 	@oc project $(NAMESPACE) &> /dev/null ||:
 
 .PHONY: install
-install: check-oc-version check-minio-credentials check-postgres-credentials namespace minio-install database-install
+install: check-oc-version check-minio-credentials check-postgres-credentials check-pgadmin-credentials namespace minio-install database-install pgadmin-install
 
 .PHONY: minio-install
 minio-install:
@@ -120,8 +136,33 @@ database-install: build-data-loader-image
 		(echo "Data loading job failed or timed out. Check logs with: oc logs job/pgvector-data-loader -n $(NAMESPACE)" && exit 1)
 	@echo "Database installation and data loading complete."
 
+# Install pgAdmin for database administration
+.PHONY: pgadmin-install
+pgadmin-install:
+	@echo "Pre-creating pgadmin service account and granting privileged SCC..."
+	@oc create serviceaccount pgadmin -n $(NAMESPACE) 2>/dev/null || echo "ServiceAccount already exists"
+	@oc adm policy add-scc-to-user privileged -z pgadmin -n $(NAMESPACE) 2>/dev/null || echo "SCC already granted"
+	@echo "Installing pgAdmin helm chart..."
+	@helm -n $(NAMESPACE) upgrade --install pgadmin $(PGADMIN_CHART) \
+		--set pgadmin.email=$(pgadmin.email) \
+		--set pgadmin.password=$(pgadmin.password) \
+		--set postgres.host=pgvector-0.pgvector-postgres-service \
+		--set postgres.port=5432 \
+		--set postgres.user=$(postgres.userId) \
+		--set postgres.password=$(postgres.password) \
+		--set postgres.database=$(postgres.databaseName) \
+		--timeout 5m
+	@echo "Waiting for pgAdmin to be ready..."
+	@oc rollout status deployment/pgadmin -n $(NAMESPACE) --timeout=180s
+	@echo "Waiting for pgAdmin route to be ready..."
+	@oc wait --for=jsonpath='{.status.ingress[0].conditions[?(@.type=="Admitted")].status}=True' \
+		route/pgadmin -n $(NAMESPACE) --timeout=60s
+	@echo "pgAdmin installation complete."
+	@echo "pgAdmin URL: https://$$(oc get route pgadmin -o jsonpath='{.spec.host}' -n $(NAMESPACE))"
+	@echo "Login with email: $(pgadmin.email)"
+
 .PHONY: uninstall
-uninstall: check-oc-version minio-uninstall database-uninstall delete-project
+uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall delete-project
 
 .PHONY: minio-uninstall
 minio-uninstall:
@@ -136,6 +177,14 @@ database-uninstall:
 	@helm -n $(NAMESPACE) uninstall postgres || true
 	@echo "Removing Postgres PVCs from $(NAMESPACE)"
 	@oc get pvc -n $(NAMESPACE) -o custom-columns=NAME:.metadata.name | grep -E '^(pgvector)-data' | xargs -I {} oc delete pvc -n $(NAMESPACE) {} ||:
+
+# Uninstall pgAdmin
+.PHONY: pgadmin-uninstall
+pgadmin-uninstall:
+	@echo "Uninstalling pgAdmin helm chart"
+	@helm -n $(NAMESPACE) uninstall pgadmin || true
+	@echo "Removing pgAdmin PVCs from $(NAMESPACE)"
+	@oc get pvc -n $(NAMESPACE) -o custom-columns=NAME:.metadata.name | grep -E '^(pgadmin)-data' | xargs -I {} oc delete pvc -n $(NAMESPACE) {} ||:
 
 .PHONY: delete-project
 delete-project:
