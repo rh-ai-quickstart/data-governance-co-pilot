@@ -1,7 +1,10 @@
-[build-system]
-requires = ["setuptools", "setuptools-scm"] # Specify setuptools as a build dependency
-build-backend = "setuptools.build_meta"
+# Workspace-only pyproject.toml - does not define a package itself
+# Individual packages are in packages/
 
-[project]
-name = "data-governance-copilot"
-version = "0.0.1"
+[tool.uv.workspace]
+members = [
+    "packages/copilot",
+]
+
+[tool.uv]
+dev-dependencies = []

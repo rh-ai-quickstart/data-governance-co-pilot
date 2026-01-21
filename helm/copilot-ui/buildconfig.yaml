@@ -1,0 +1,74 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: copilot-ui
+  labels:
+    app: copilot-ui
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: copilot-ui:latest
+  source:
+    type: Dockerfile
+    dockerfile: |
+      # Build stage
+      FROM node:20-alpine AS builder
+
+      WORKDIR /app
+
+      # Copy package files
+      COPY apps/ui/package.json apps/ui/pnpm-lock.yaml* apps/ui/package-lock.json* ./
+
+      # Install pnpm
+      RUN npm install -g pnpm
+
+      # Install dependencies
+      RUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; \
+          elif [ -f package-lock.json ]; then npm ci; \
+          else npm install; fi
+
+      # Copy source files
+      COPY apps/ui/ .
+
+      # Set backend URL via build arg (will be passed from Makefile)
+      ARG VITE_COPILOT_BACKEND_URL
+      ENV VITE_COPILOT_BACKEND_URL=${VITE_COPILOT_BACKEND_URL}
+
+      # Build the app
+      RUN if [ -f pnpm-lock.yaml ]; then pnpm run build; \
+          else npm run build; fi
+
+      # Runtime stage - nginx to serve static files
+      FROM nginxinc/nginx-unprivileged:alpine
+
+      # Copy built files from builder (SvelteKit output with adapter-static)
+      COPY --from=builder /app/build /usr/share/nginx/html
+
+      # Create nginx config for SPA
+      RUN echo 'server { \
+          listen 8080; \
+          root /usr/share/nginx/html; \
+          index index.html; \
+          location / { \
+              try_files $uri $uri/ /index.html; \
+          } \
+          # Disable caching for index.html to ensure latest version \
+          location = /index.html { \
+              add_header Cache-Control "no-cache, no-store, must-revalidate"; \
+          } \
+      }' > /etc/nginx/conf.d/default.conf
+
+      # OpenShift compatibility
+      USER 1001
+
+      EXPOSE 8080
+
+      CMD ["nginx", "-g", "daemon off;"]
+  strategy:
+    type: Docker
+    dockerStrategy:
+      buildArgs:
+      - name: VITE_COPILOT_BACKEND_URL
+        value: "${BACKEND_URL}"
+  triggers: []

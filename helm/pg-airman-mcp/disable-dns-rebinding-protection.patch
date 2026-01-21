@@ -1,0 +1,22 @@
+--- a/src/pg_airman_mcp/server.py
++++ b/src/pg_airman_mcp/server.py
+@@ -1,5 +1,6 @@
+ from mcp.server.fastmcp import FastMCP
+ from mcp.server import Server
++from mcp.server.transport_security import TransportSecuritySettings
+ import os
+ import sys
+ import asyncpg
+@@ -854,7 +855,11 @@ async def main():
+
+     # Initialize FastMCP server
+     server = FastMCP(
+-        "Pg Airman MCP Server"
++        "Pg Airman MCP Server",
++        transport_security=TransportSecuritySettings(
++            # Disable DNS rebinding protection for Kubernetes service mesh
++            enable_dns_rebinding_protection=False,
++        )
+     )
+
+     logger.info(f"Starting Pg Airman MCP Server in {access_mode.upper()} mode")

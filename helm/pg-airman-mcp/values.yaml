@@ -1,0 +1,44 @@
+applicationName: pg-airman-mcp
+
+# PostgreSQL connection details
+postgres:
+  host: pgvector-0.pgvector-postgres-service
+  port: 5432
+  user: <postgres userId> # provided via postgres.user parameter
+  password: <postgres password> # provided via postgres.password parameter
+  database: <postgres database> # provided via postgres.database parameter
+
+# MCP Server configuration
+mcp:
+  # Access mode: "restricted" (read-only, production) or "unrestricted" (read-write, development)
+  accessMode: restricted
+
+  # Transport mode: "stdio", "sse", or "streamable-http"
+  # For Kubernetes deployment, streamable-http provides simpler request-response pattern
+  transport: streamable-http
+
+  # Port for SSE/HTTP transport (ignored for stdio)
+  port: 8000
+
+# Container image configuration
+image:
+  repository: enterprisedb/pg-airman-mcp
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Resource limits
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+
+# Replica count (keep at 1 for stateful database connections)
+replicas: 1

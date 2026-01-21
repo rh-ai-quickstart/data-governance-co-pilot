@@ -12,6 +12,12 @@ MINIO_CHART := minio
 POSTGRES_CHART := pgvector
 # pgAdmin chart for database administration UI
 PGADMIN_CHART := pgadmin
+# pg-airman-mcp chart for PostgreSQL MCP server
+PG_AIRMAN_MCP_CHART := pg-airman-mcp
+# copilot-backend chart for FastAPI backend service
+COPILOT_BACKEND_CHART := copilot-backend
+# copilot-ui chart for Svelte frontend
+COPILOT_UI_CHART := copilot-ui
 
 MINIMUM_OC_VERSION = "4.17.0"
 MINIMUM_USERID_LENGTH = 3
@@ -22,8 +28,20 @@ MINIMUM_PASSWORD_LENGTH = 8
 help:
 	@echo "Available targets:"
 	@echo "  install       - Installs quickstart and supporting resources"
-	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, minio.userId, minio.password, pgadmin.email, pgadmin.password"
-	@echo "                  Example: make install NAMESPACE=myns postgres.userId=postgres postgres.password=pass123 postgres.databaseName=recsys minio.userId=minio minio.password=minio123 pgadmin.email=admin@example.com pgadmin.password=admin123"
+	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, minio.userId, minio.password, pgadmin.email, pgadmin.password, copilot.llmApiKey"
+	@echo "                  Example: make install NAMESPACE=myns postgres.userId=postgres postgres.password=pass123 postgres.databaseName=recsys minio.userId=minio minio.password=minio123 pgadmin.email=admin@example.com pgadmin.password=admin123 copilot.llmApiKey=not-needed"
+	@echo "  pg-airman-mcp-install - Installs pg-airman-mcp MCP server (builds custom image with libpq5 fix)"
+	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName"
+	@echo "                  Optional: pgairman.accessMode (default: restricted)"
+	@echo "                  Note: First run builds custom image (5-10 minutes), subsequent runs are faster"
+	@echo "  copilot-backend-install - Installs copilot backend service (FastAPI orchestration layer)"
+	@echo "                  Required: NAMESPACE, copilot.llmApiKey"
+	@echo "                  Optional: copilot.llmBaseUrl, copilot.llmModel"
+	@echo "                  Example: make copilot-backend-install NAMESPACE=myns copilot.llmApiKey=not-needed"
+	@echo "                  Note: First run builds custom image (3-5 minutes), subsequent runs are faster"
+	@echo "  copilot-ui-install - Installs copilot frontend (Svelte UI)"
+	@echo "                  Required: NAMESPACE"
+	@echo "                  Note: First run builds custom image (3-5 minutes), subsequent runs are faster"
 	@echo "  uninstall     - Uninstalls the quickstart and clean up resources"
 	@echo ""
 	@echo "Configuration options (set via environment variables or make arguments):"
@@ -35,6 +53,7 @@ help:
 	@echo "  minio.password           - Password to use for minio installation (required)"
 	@echo "  pgadmin.email            - pgAdmin login email (required)"
 	@echo "  pgadmin.password         - pgAdmin login password (required)"
+	@echo "  pgairman.accessMode      - MCP access mode: restricted or unrestricted (default: restricted)"
 
 # Older version of oc will raise error processing some of the commands in this make file; enforce a minimum version
 .PHONY: check-oc-version
@@ -91,13 +110,23 @@ check-pgadmin-credentials:
 		exit 1; \
 	fi
 
+# Validation for LLM API key
+.PHONY: check-llm-api-key
+check-llm-api-key:
+	@if [ -z "$(copilot.llmApiKey)" ]; then \
+		echo "Error: copilot.llmApiKey must be set."; \
+		echo "Usage: make copilot-backend-install NAMESPACE=... copilot.llmApiKey=your-key"; \
+		echo "Note: Use 'not-needed' for vLLM servers without authentication"; \
+		exit 1; \
+	fi
+
 .PHONY: namespace
 namespace:
 	@oc create namespace $(NAMESPACE) &> /dev/null && oc label namespace $(NAMESPACE) modelmesh-enabled=false ||:
 	@oc project $(NAMESPACE) &> /dev/null ||:
 
 .PHONY: install
-install: check-oc-version check-minio-credentials check-postgres-credentials check-pgadmin-credentials namespace minio-install database-install pgadmin-install
+install: check-oc-version check-minio-credentials check-postgres-credentials check-pgadmin-credentials namespace minio-install database-install pgadmin-install pg-airman-mcp-install copilot-backend-install copilot-ui-install
 
 .PHONY: minio-install
 minio-install:
@@ -161,8 +190,40 @@ pgadmin-install:
 	@echo "pgAdmin URL: https://$$(oc get route pgadmin -o jsonpath='{.spec.host}' -n $(NAMESPACE))"
 	@echo "Login with email: $(pgadmin.email)"
 
+# Build pg-airman-mcp custom image with libpq5 fix
+.PHONY: build-pg-airman-mcp-image
+build-pg-airman-mcp-image:
+	@echo "Creating ImageStream for pg-airman-mcp..."
+	@oc apply -f $(PG_AIRMAN_MCP_CHART)/imagestream.yaml -n $(NAMESPACE)
+	@echo "Creating BuildConfig for pg-airman-mcp..."
+	@oc apply -f $(PG_AIRMAN_MCP_CHART)/buildconfig.yaml -n $(NAMESPACE)
+	@echo "Starting image build (this may take 5-10 minutes)..."
+	@oc start-build pg-airman-mcp --follow -n $(NAMESPACE) || echo "Build already running or completed"
+	@echo "pg-airman-mcp image built successfully"
+
+# Install pg-airman-mcp MCP server
+.PHONY: pg-airman-mcp-install
+pg-airman-mcp-install: check-postgres-credentials build-pg-airman-mcp-image
+	@echo "Installing pg-airman-mcp helm chart..."
+	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
+		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/pg-airman-mcp \
+		--set image.tag=latest \
+		--set image.pullPolicy=Always \
+		--set postgres.host=pgvector-0.pgvector-postgres-service \
+		--set postgres.port=5432 \
+		--set postgres.user=$(postgres.userId) \
+		--set postgres.password=$(postgres.password) \
+		--set postgres.database=$(postgres.databaseName) \
+		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
+		--timeout 5m
+	@echo "Waiting for pg-airman-mcp to be ready..."
+	@oc rollout status deployment/pg-airman-mcp -n $(NAMESPACE) --timeout=300s
+	@echo "pg-airman-mcp installation complete."
+	@echo "Service URL (internal): http://pg-airman-mcp-service:8000"
+	@echo "Transport: streamable-http (default), access mode: $(if $(pgairman.accessMode),$(pgairman.accessMode),restricted)"
+
 .PHONY: uninstall
-uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall delete-project
+uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
 
 .PHONY: minio-uninstall
 minio-uninstall:
@@ -185,6 +246,86 @@ pgadmin-uninstall:
 	@helm -n $(NAMESPACE) uninstall pgadmin || true
 	@echo "Removing pgAdmin PVCs from $(NAMESPACE)"
 	@oc get pvc -n $(NAMESPACE) -o custom-columns=NAME:.metadata.name | grep -E '^(pgadmin)-data' | xargs -I {} oc delete pvc -n $(NAMESPACE) {} ||:
+
+# Uninstall pg-airman-mcp
+.PHONY: pg-airman-mcp-uninstall
+pg-airman-mcp-uninstall:
+	@echo "Uninstalling pg-airman-mcp helm chart"
+	@helm -n $(NAMESPACE) uninstall pg-airman-mcp || true
+
+# Build copilot-backend custom image
+.PHONY: build-copilot-backend-image
+build-copilot-backend-image:
+	@echo "Creating ImageStream for copilot-backend..."
+	@oc apply -f $(COPILOT_BACKEND_CHART)/imagestream.yaml -n $(NAMESPACE)
+	@echo "Creating BuildConfig for copilot-backend..."
+	@oc apply -f $(COPILOT_BACKEND_CHART)/buildconfig.yaml -n $(NAMESPACE)
+	@echo "Starting image build (this may take 3-5 minutes)..."
+	@echo "Uploading source files to OpenShift..."
+	@oc start-build copilot-backend --from-dir=.. --follow -n $(NAMESPACE) || echo "Build already running or completed"
+	@echo "copilot-backend image built successfully"
+
+# Install copilot-backend service
+.PHONY: copilot-backend-install
+copilot-backend-install: check-llm-api-key build-copilot-backend-image
+	@echo "Installing copilot-backend helm chart..."
+	@helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
+		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
+		--set image.tag=latest \
+		--set image.pullPolicy=Always \
+		--set llm.baseUrl=$(if $(copilot.llmBaseUrl),$(copilot.llmBaseUrl),http://nemotron-service:8000/v1) \
+		--set llm.model=$(if $(copilot.llmModel),$(copilot.llmModel),nvidia/nemotron-nano-9b-v2) \
+		--set llm.apiKey=$(copilot.llmApiKey) \
+		--timeout 5m
+	@echo "Waiting for copilot-backend to be ready..."
+	@oc rollout status deployment/copilot-backend -n $(NAMESPACE) --timeout=300s
+	@echo "copilot-backend installation complete."
+	@echo "Service URL (internal): http://copilot-backend:8080"
+	@echo "Public route: https://$$(oc get route copilot-backend -o jsonpath='{.spec.host}' -n $(NAMESPACE))"
+
+# Uninstall copilot-backend
+.PHONY: copilot-backend-uninstall
+copilot-backend-uninstall:
+	@echo "Uninstalling copilot-backend helm chart"
+	@helm -n $(NAMESPACE) uninstall copilot-backend || true
+
+# Build copilot-ui custom image
+.PHONY: build-copilot-ui-image
+build-copilot-ui-image:
+	@echo "Creating ImageStream for copilot-ui..."
+	@oc apply -f $(COPILOT_UI_CHART)/imagestream.yaml -n $(NAMESPACE)
+	@echo "Getting copilot-backend route URL..."
+	@BACKEND_URL=$$(oc get route copilot-backend -o jsonpath='https://{.spec.host}' -n $(NAMESPACE) 2>/dev/null || echo "http://copilot-backend:8080"); \
+	echo "Backend URL: $$BACKEND_URL"; \
+	echo "Creating BuildConfig for copilot-ui..."; \
+	cat $(COPILOT_UI_CHART)/buildconfig.yaml | sed "s|\$${BACKEND_URL}|$$BACKEND_URL|g" | oc apply -f - -n $(NAMESPACE); \
+	echo "Starting image build (this may take 3-5 minutes)..."; \
+	echo "Uploading UI source files to OpenShift..."; \
+	oc start-build copilot-ui --from-dir=../. --follow -n $(NAMESPACE) || echo "Build already running or completed"; \
+	echo "copilot-ui image built successfully"
+
+# Install copilot-ui frontend
+.PHONY: copilot-ui-install
+copilot-ui-install: build-copilot-ui-image
+	@echo "Installing copilot-ui helm chart..."
+	@BACKEND_URL=$$(oc get route copilot-backend -o jsonpath='https://{.spec.host}' -n $(NAMESPACE) 2>/dev/null || echo "http://copilot-backend:8080"); \
+	helm -n $(NAMESPACE) upgrade --install copilot-ui $(COPILOT_UI_CHART) \
+		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-ui \
+		--set image.tag=latest \
+		--set image.pullPolicy=Always \
+		--set backend.url=$$BACKEND_URL \
+		--timeout 5m
+	@echo "Waiting for copilot-ui to be ready..."
+	@oc rollout status deployment/copilot-ui -n $(NAMESPACE) --timeout=300s
+	@echo "copilot-ui installation complete."
+	@echo "Service URL (internal): http://copilot-ui:8080"
+	@echo "Public UI URL: https://$$(oc get route copilot-ui -o jsonpath='{.spec.host}' -n $(NAMESPACE))"
+
+# Uninstall copilot-ui
+.PHONY: copilot-ui-uninstall
+copilot-ui-uninstall:
+	@echo "Uninstalling copilot-ui helm chart"
+	@helm -n $(NAMESPACE) uninstall copilot-ui || true
 
 .PHONY: delete-project
 delete-project:

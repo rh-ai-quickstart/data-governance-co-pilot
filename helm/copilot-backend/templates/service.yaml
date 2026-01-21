@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "copilot-backend.fullname" . }}
+  labels:
+    app: {{ include "copilot-backend.name" . }}
+    chart: {{ include "copilot-backend.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  - port: {{ .Values.service.port }}
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: {{ include "copilot-backend.name" . }}
+    release: {{ .Release.Name }}

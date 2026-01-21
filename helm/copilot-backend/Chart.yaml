@@ -1,0 +1,6 @@
+apiVersion: v2
+name: copilot-backend
+description: Data Governance Copilot Backend Service
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

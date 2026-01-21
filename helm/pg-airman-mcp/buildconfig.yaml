@@ -1,0 +1,83 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: pg-airman-mcp
+  labels:
+    app: pg-airman-mcp
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: pg-airman-mcp:latest
+  source:
+    type: Dockerfile
+    dockerfile: |
+      # Fixed pg-airman-mcp image with proper libpq dependencies for OpenShift
+      FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+
+      ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
+      # Install build dependencies
+      RUN apt-get update && apt-get install -y --no-install-recommends \
+          gcc \
+          libpq-dev \
+          python3-dev \
+          git \
+          && rm -rf /var/lib/apt/lists/*
+
+      # Clone pg-airman-mcp
+      WORKDIR /tmp
+      RUN git clone https://github.com/EnterpriseDB/pg-airman-mcp.git
+
+      WORKDIR /tmp/pg-airman-mcp
+
+      # Apply patch to disable DNS rebinding protection for Kubernetes
+      # This is required because MCP SDK v1.8.0+ has strict Host header validation
+      # that rejects requests from Kubernetes service DNS names
+      RUN sed -i '/from mcp.server.fastmcp import FastMCP/a from mcp.server.transport_security import TransportSecuritySettings' src/pg_airman_mcp/server.py && \
+          sed -i 's/mcp = FastMCP("pg-airman-mcp")/mcp = FastMCP(\n    "pg-airman-mcp",\n    transport_security=TransportSecuritySettings(\n        enable_dns_rebinding_protection=False,\n    )\n)/' src/pg_airman_mcp/server.py && \
+          echo "Successfully patched server.py to disable DNS rebinding protection"
+
+      # Install Python dependencies AND the project itself using uv pip
+      RUN uv venv /tmp/pg-airman-mcp/.venv && \
+          . /tmp/pg-airman-mcp/.venv/bin/activate && \
+          uv pip install .
+
+      # Runtime stage
+      FROM python:3.12-slim-bookworm
+
+      # CRITICAL FIX: Install libpq5 (runtime library) not just libpq-dev (headers)
+      RUN apt-get update && apt-get install -y --no-install-recommends \
+          libpq5 \
+          dnsutils \
+          iputils-ping \
+          net-tools \
+          && rm -rf /var/lib/apt/lists/*
+
+      # Copy application from builder
+      COPY --from=builder /tmp/pg-airman-mcp /app
+
+      WORKDIR /app
+
+      # Fix shebangs in .venv/bin scripts (they point to /tmp/pg-airman-mcp instead of /app)
+      RUN find /app/.venv/bin -type f -exec sed -i 's|#!/tmp/pg-airman-mcp/.venv/bin/python|#!/app/.venv/bin/python|g' {} \;
+
+      # OpenShift compatibility: support arbitrary user IDs
+      # Make entrypoint executable first, then set group permissions
+      RUN chmod +x /app/docker-entrypoint.sh && \
+          chmod -R g=u /app && \
+          chgrp -R 0 /app && \
+          chmod g+x /app/docker-entrypoint.sh
+
+      # Default to non-root user but allow OpenShift to override
+      USER 1000
+
+      ENV PATH="/app/.venv/bin:$PATH"
+
+      EXPOSE 8000
+
+      ENTRYPOINT ["/app/docker-entrypoint.sh"]
+      CMD ["pg-airman-mcp"]
+  strategy:
+    type: Docker
+  triggers: []

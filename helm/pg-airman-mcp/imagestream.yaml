@@ -1,0 +1,9 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: pg-airman-mcp
+  labels:
+    app: pg-airman-mcp
+spec:
+  lookupPolicy:
+    local: true

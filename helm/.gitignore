@@ -1,0 +1,16 @@
+# Personal override files with secrets
+# These files should contain environment-specific secrets
+# and should NEVER be committed to Git
+values-*.yaml
+*-values.yaml
+values.local.yaml
+values.dev.yaml
+values.prod.yaml
+values.staging.yaml
+
+# Standalone secret files
+secrets.yaml
+*-secrets.yaml
+
+# Note: The default values.yaml files ARE committed and should
+# NOT contain any secrets - only configuration templates

@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "copilot-backend.fullname" . }}
+  labels:
+    app: {{ include "copilot-backend.name" . }}
+    chart: {{ include "copilot-backend.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "copilot-backend.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "copilot-backend.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: copilot-backend
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: PG_AIRMAN_MCP_SERVICE_PORT
+          value: "{{ .Values.mcp.serviceUrl }}"
+        - name: LLM_BASE_URL
+          value: "{{ .Values.llm.baseUrl }}"
+        - name: LLM_MODEL
+          value: "{{ .Values.llm.model }}"
+        - name: LLM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "copilot-backend.fullname" . }}
+              key: LLM_API_KEY
+        livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.readinessProbe | nindent 10 }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}

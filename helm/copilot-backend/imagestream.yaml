@@ -1,0 +1,9 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: copilot-backend
+  labels:
+    app: copilot-backend
+spec:
+  lookupPolicy:
+    local: true

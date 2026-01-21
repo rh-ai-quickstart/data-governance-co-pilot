@@ -1,0 +1,20 @@
+{{- if or (eq .Values.mcp.transport "sse") (eq .Values.mcp.transport "streamable-http") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-airman-mcp-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: pg-airman-mcp
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: mcp
+      protocol: TCP
+      name: mcp
+  selector:
+    app.kubernetes.io/name: pg-airman-mcp
+{{- end }}
