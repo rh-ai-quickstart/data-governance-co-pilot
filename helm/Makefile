@@ -14,10 +14,16 @@ POSTGRES_CHART := pgvector
 PGADMIN_CHART := pgadmin
 # pg-airman-mcp chart for PostgreSQL MCP server
 PG_AIRMAN_MCP_CHART := pg-airman-mcp
+# nemotron-model chart for NVIDIA Nemotron LLM deployment
+NEMOTRON_MODEL_CHART := nemotron-model
 # copilot-backend chart for FastAPI backend service
 COPILOT_BACKEND_CHART := copilot-backend
 # copilot-ui chart for Svelte frontend
 COPILOT_UI_CHART := copilot-ui
+
+# Flag to control whether to deploy the LLM model (default: false)
+# Set to true to automatically deploy NVIDIA Nemotron model
+DEPLOY_MODEL ?= false
 
 MINIMUM_OC_VERSION = "4.17.0"
 MINIMUM_USERID_LENGTH = 3
@@ -28,16 +34,23 @@ MINIMUM_PASSWORD_LENGTH = 8
 help:
 	@echo "Available targets:"
 	@echo "  install       - Installs quickstart and supporting resources"
-	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, minio.userId, minio.password, pgadmin.email, pgadmin.password, copilot.llmApiKey"
-	@echo "                  Example: make install NAMESPACE=myns postgres.userId=postgres postgres.password=pass123 postgres.databaseName=recsys minio.userId=minio minio.password=minio123 pgadmin.email=admin@example.com pgadmin.password=admin123 copilot.llmApiKey=not-needed"
+	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, minio.userId, minio.password, pgadmin.email, pgadmin.password"
+	@echo "                  Optional: DEPLOY_MODEL=true (auto-configures model using OCI image)"
+	@echo "                  Example: make install NAMESPACE=myns postgres.userId=postgres postgres.password=pass123 postgres.databaseName=recsys minio.userId=minio minio.password=minio123 pgadmin.email=admin@example.com pgadmin.password=admin123 DEPLOY_MODEL=true"
 	@echo "  pg-airman-mcp-install - Installs pg-airman-mcp MCP server (builds custom image with libpq5 fix)"
 	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName"
 	@echo "                  Optional: pgairman.accessMode (default: restricted)"
 	@echo "                  Note: First run builds custom image (5-10 minutes), subsequent runs are faster"
+	@echo "  nemotron-model-install - Deploys NVIDIA Nemotron Nano 9B v2 model using KServe"
+	@echo "                  Required: NAMESPACE"
+	@echo "                  Optional: model.storage.s3Bucket (uses OCI container image by default)"
+	@echo "                  Example: make nemotron-model-install NAMESPACE=myns"
+	@echo "                  Note: Uses quay.io/eformat/nvidia-nemotron-nano-9b-v2 OCI image by default"
 	@echo "  copilot-backend-install - Installs copilot backend service (FastAPI orchestration layer)"
-	@echo "                  Required: NAMESPACE, copilot.llmApiKey"
-	@echo "                  Optional: copilot.llmBaseUrl, copilot.llmModel"
-	@echo "                  Example: make copilot-backend-install NAMESPACE=myns copilot.llmApiKey=not-needed"
+	@echo "                  Required: NAMESPACE"
+	@echo "                  Optional: DEPLOY_MODEL=true (auto-extracts llmBaseUrl, llmModel, and llmApiKey from deployed model)"
+	@echo "                  If DEPLOY_MODEL=false: copilot.llmBaseUrl, copilot.llmModel, copilot.llmApiKey are required"
+	@echo "                  Example: make copilot-backend-install NAMESPACE=myns DEPLOY_MODEL=true"
 	@echo "                  Note: First run builds custom image (3-5 minutes), subsequent runs are faster"
 	@echo "  copilot-ui-install - Installs copilot frontend (Svelte UI)"
 	@echo "                  Required: NAMESPACE"
@@ -46,6 +59,10 @@ help:
 	@echo ""
 	@echo "Configuration options (set via environment variables or make arguments):"
 	@echo "  NAMESPACE                - Target namespace (required)"
+	@echo "  DEPLOY_MODEL             - Set to 'true' to auto-deploy and configure LLM model (default: false)"
+	@echo "                             Uses OCI image by default, model name/endpoint/API key auto-extracted"
+	@echo "  model.storage.s3Bucket   - S3 bucket path (optional, overrides default OCI image)"
+	@echo "  model.storage.uri        - Custom OCI/URI path (optional, overrides default OCI image)"
 	@echo "  postgres.userId          - PostgreSQL user ID (required)"
 	@echo "  postgres.password        - PostgreSQL password (required)"
 	@echo "  postgres.databaseName    - PostgreSQL database name (required)"
@@ -54,6 +71,10 @@ help:
 	@echo "  pgadmin.email            - pgAdmin login email (required)"
 	@echo "  pgadmin.password         - pgAdmin login password (required)"
 	@echo "  pgairman.accessMode      - MCP access mode: restricted or unrestricted (default: restricted)"
+	@echo "  copilot.llmApiKey        - LLM API key (required if DEPLOY_MODEL=false, auto-extracted if true)"
+	@echo "  copilot.llmBaseUrl       - LLM base URL (required if DEPLOY_MODEL=false, auto-extracted if true)"
+	@echo "  copilot.llmModel         - LLM model name (required if DEPLOY_MODEL=false, auto-extracted if true)"
+	@echo "  copilot.maxContextLength - LLM max context length in tokens (default: 8096)"
 
 # Older version of oc will raise error processing some of the commands in this make file; enforce a minimum version
 .PHONY: check-oc-version
@@ -126,7 +147,24 @@ namespace:
 	@oc project $(NAMESPACE) &> /dev/null ||:
 
 .PHONY: install
-install: check-oc-version check-minio-credentials check-postgres-credentials check-pgadmin-credentials namespace minio-install database-install pgadmin-install pg-airman-mcp-install copilot-backend-install copilot-ui-install
+install: check-oc-version check-minio-credentials check-postgres-credentials check-pgadmin-credentials namespace
+ifeq ($(DEPLOY_MODEL),true)
+	@echo "DEPLOY_MODEL=true: Starting model deployment first (non-blocking)..."
+	@$(MAKE) nemotron-model-deploy NAMESPACE=$(NAMESPACE) \
+		$(if $(model.storage.s3Bucket),model.storage.s3Bucket=$(model.storage.s3Bucket),) \
+		$(if $(model.storage.uri),model.storage.uri=$(model.storage.uri),)
+	@echo "Model is deploying in the background. Continuing with remaining deployments..."
+endif
+	@$(MAKE) minio-install NAMESPACE=$(NAMESPACE)
+	@$(MAKE) database-install NAMESPACE=$(NAMESPACE)
+	@$(MAKE) pgadmin-install NAMESPACE=$(NAMESPACE)
+	@$(MAKE) pg-airman-mcp-install NAMESPACE=$(NAMESPACE)
+	@$(MAKE) copilot-backend-install NAMESPACE=$(NAMESPACE) DEPLOY_MODEL=$(DEPLOY_MODEL) \
+		$(if $(model.storage.s3Bucket),model.storage.s3Bucket=$(model.storage.s3Bucket),) \
+		$(if $(copilot.llmBaseUrl),copilot.llmBaseUrl=$(copilot.llmBaseUrl),) \
+		$(if $(copilot.llmModel),copilot.llmModel=$(copilot.llmModel),) \
+		$(if $(copilot.llmApiKey),copilot.llmApiKey=$(copilot.llmApiKey),)
+	@$(MAKE) copilot-ui-install NAMESPACE=$(NAMESPACE)
 
 .PHONY: minio-install
 minio-install:
@@ -223,7 +261,7 @@ pg-airman-mcp-install: check-postgres-credentials build-pg-airman-mcp-image
 	@echo "Transport: streamable-http (default), access mode: $(if $(pgairman.accessMode),$(pgairman.accessMode),restricted)"
 
 .PHONY: uninstall
-uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
+uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall nemotron-model-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
 
 .PHONY: minio-uninstall
 minio-uninstall:
@@ -253,6 +291,48 @@ pg-airman-mcp-uninstall:
 	@echo "Uninstalling pg-airman-mcp helm chart"
 	@helm -n $(NAMESPACE) uninstall pg-airman-mcp || true
 
+# Deploy NVIDIA Nemotron model using KServe (non-blocking - just starts deployment)
+.PHONY: nemotron-model-deploy
+nemotron-model-deploy:
+	@echo "Deploying NVIDIA Nemotron Nano 9B v2 model using KServe..."
+	@echo "Using OCI container image: quay.io/eformat/nvidia-nemotron-nano-9b-v2"
+	@helm -n $(NAMESPACE) upgrade --install nemotron-model $(NEMOTRON_MODEL_CHART) \
+		$(if $(model.storage.s3Bucket),--set model.storage.type=s3 --set model.storage.s3Bucket=$(model.storage.s3Bucket),) \
+		$(if $(model.storage.uri),--set model.storage.uri=$(model.storage.uri),) \
+		--timeout 10m
+	@echo "Model deployment started. It will be ready in 5-10 minutes."
+	@echo "You can monitor progress with: oc get inferenceservice nvidia-nemotron-nano-9b-v2 -n $(NAMESPACE) -w"
+
+# Wait for NVIDIA Nemotron model to be ready
+.PHONY: nemotron-model-wait
+nemotron-model-wait:
+	@echo "Waiting for InferenceService to be ready (this may take 5-10 minutes for model download)..."
+	@bash -c 'start_time=$$(date +%s); \
+		while true; do \
+			if oc get inferenceservice nvidia-nemotron-nano-9b-v2 -n $(NAMESPACE) -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].status}" 2>/dev/null | grep -q "True"; then \
+				break; \
+			fi; \
+			elapsed=$$(($$(date +%s) - start_time)); \
+			if [ $$elapsed -gt 600 ]; then \
+				echo "Timeout waiting for model deployment. Check status with: oc get inferenceservice nvidia-nemotron-nano-9b-v2 -n $(NAMESPACE)"; \
+				exit 1; \
+			fi; \
+			echo "Waiting for model to be ready... ($$elapsed seconds elapsed)"; \
+			sleep 10; \
+		done'
+	@echo "Model deployment complete!"
+	@echo "Model endpoint: https://$$(oc get route nvidia-nemotron-nano-9b-v2 -o jsonpath='{.spec.host}' -n $(NAMESPACE))"
+
+# Deploy and wait for NVIDIA Nemotron model (convenience target)
+.PHONY: nemotron-model-install
+nemotron-model-install: nemotron-model-deploy nemotron-model-wait
+
+# Uninstall nemotron-model
+.PHONY: nemotron-model-uninstall
+nemotron-model-uninstall:
+	@echo "Uninstalling nemotron-model helm chart"
+	@helm -n $(NAMESPACE) uninstall nemotron-model || true
+
 # Build copilot-backend custom image
 .PHONY: build-copilot-backend-image
 build-copilot-backend-image:
@@ -267,16 +347,39 @@ build-copilot-backend-image:
 
 # Install copilot-backend service
 .PHONY: copilot-backend-install
-copilot-backend-install: check-llm-api-key build-copilot-backend-image
-	@echo "Installing copilot-backend helm chart..."
+copilot-backend-install: build-copilot-backend-image
+ifeq ($(DEPLOY_MODEL),true)
+	@echo "DEPLOY_MODEL=true: Waiting for LLM model to be ready..."
+	@$(MAKE) nemotron-model-wait NAMESPACE=$(NAMESPACE)
+	@echo "Extracting model configuration from deployment..."
+	@MODEL_NAME=$$(oc get inferenceservice -n $(NAMESPACE) -l release=nemotron-model -o jsonpath='{.items[0].metadata.name}'); \
+	MODEL_URL="https://$$(oc get route $$MODEL_NAME -o jsonpath='{.spec.host}' -n $(NAMESPACE))/v1"; \
+	MODEL_API_KEY=$$(oc get secret default-name-$$MODEL_NAME-sa -n $(NAMESPACE) -o jsonpath='{.data.token}' | base64 -d); \
+	echo "Model name: $$MODEL_NAME"; \
+	echo "Model endpoint: $$MODEL_URL"; \
+	echo "Model API key: [extracted from service account token secret]"; \
+	echo "Installing copilot-backend with auto-configured model settings..."; \
+	helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
+		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
+		--set image.tag=latest \
+		--set image.pullPolicy=Always \
+		--set llm.baseUrl=$$MODEL_URL \
+		--set llm.model=$$MODEL_NAME \
+		--set llm.apiKey=$$MODEL_API_KEY \
+		$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
+		--timeout 5m
+else
+	@echo "Installing copilot-backend with configured model endpoint..."
 	@helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
 		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
 		--set image.tag=latest \
 		--set image.pullPolicy=Always \
-		--set llm.baseUrl=$(if $(copilot.llmBaseUrl),$(copilot.llmBaseUrl),http://nemotron-service:8000/v1) \
-		--set llm.model=$(if $(copilot.llmModel),$(copilot.llmModel),nvidia/nemotron-nano-9b-v2) \
-		--set llm.apiKey=$(copilot.llmApiKey) \
+		$(if $(copilot.llmBaseUrl),--set llm.baseUrl=$(copilot.llmBaseUrl),) \
+		$(if $(copilot.llmModel),--set llm.model=$(copilot.llmModel),) \
+		$(if $(copilot.llmApiKey),--set llm.apiKey=$(copilot.llmApiKey),) \
+		$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
 		--timeout 5m
+endif
 	@echo "Waiting for copilot-backend to be ready..."
 	@oc rollout status deployment/copilot-backend -n $(NAMESPACE) --timeout=300s
 	@echo "copilot-backend installation complete."

@@ -1,0 +1,52 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    openshift.io/display-name: {{ .Values.model.displayName | quote }}
+    {{- if .Values.security.enableAuth }}
+    security.opendatahub.io/enable-auth: "true"
+    {{- end }}
+    serving.kserve.io/deploymentMode: RawDeployment
+    {{- if .Values.route.enabled }}
+    # Route timeout for long-running inference requests
+    haproxy.router.openshift.io/timeout: {{ .Values.route.timeout | quote }}
+    haproxy.router.openshift.io/timeout-tunnel: {{ .Values.route.timeout | quote }}
+    {{- end }}
+  name: {{ .Values.model.name }}
+  labels:
+    app: {{ .Values.model.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    networking.kserve.io/visibility: exposed
+    opendatahub.io/dashboard: "true"
+spec:
+  predictor:
+    automountServiceAccountToken: false
+    minReplicas: {{ .Values.model.scaling.minReplicas }}
+    maxReplicas: {{ .Values.model.scaling.maxReplicas }}
+    model:
+      args:
+         {{- toYaml .Values.model.runtime.args | nindent 8 }}
+      modelFormat:
+        name: vLLM
+      name: ""
+      resources:
+        {{- toYaml .Values.model.resources | nindent 8 }}
+      runtime: {{ .Values.model.runtime.name }}
+      {{- if eq .Values.model.storage.type "s3" }}
+      storageUri: {{ .Values.model.storage.s3Bucket | quote }}
+      {{- else if eq .Values.model.storage.type "pvc" }}
+      storageUri: pvc://{{ .Values.model.storage.pvcName }}
+      {{- else if eq .Values.model.storage.type "uri" }}
+      storageUri: {{ .Values.model.storage.uri | quote }}
+      {{- end }}
+    tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+    # KNative progress deadline for long-running inference
+    annotations:
+      serving.knative.dev/progress-deadline: {{ .Values.route.oauthProxyUpstreamTimeout }}
+
+
+

@@ -34,6 +34,8 @@ spec:
           value: "{{ .Values.llm.baseUrl }}"
         - name: LLM_MODEL
           value: "{{ .Values.llm.model }}"
+        - name: LLM_MAX_CONTEXT_LENGTH
+          value: "{{ .Values.llm.maxContextLength }}"
         - name: LLM_API_KEY
           valueFrom:
             secretKeyRef:

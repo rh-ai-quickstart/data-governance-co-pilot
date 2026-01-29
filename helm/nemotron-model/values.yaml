@@ -1,0 +1,63 @@
+# Model deployment configuration
+model:
+  name: nvidia-nemotron-nano-9b-v2
+  displayName: "NVIDIA-Nemotron-Nano-9B-v2"
+
+  # Model storage configuration
+  storage:
+    # Options: pvc, s3, uri (oci container image, hf, http/https)
+    type: uri
+    # Hugging Face model (public, no auth required)
+    uri: "hf://nvidia/NVIDIA-Nemotron-Nano-9B-v2"
+    # S3 bucket containing the model (alternative)
+    s3Bucket: ""
+    # PVC name if using PVC storage (alternative)
+    pvcName: ""
+
+  # Runtime configuration
+  runtime:
+    name: nvidia-nemotron-nano-9b-v2
+    # vLLM arguments for model serving
+    args:
+      - --max-model-len=32768
+      - --mamba-ssm-cache-dtype float32
+      - --enforce_eager
+      - --gpu-memory-utilization
+      - "0.95"
+      - --max-num-seqs
+      - "4"
+      - --task=generate
+      - --trust_remote_code
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - mistral
+
+  # Resource limits
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+      cpu: "8"
+      memory: "10Gi"
+    requests:
+      nvidia.com/gpu: 1
+      cpu: "4"
+      memory: "8Gi"
+
+  # Scaling configuration
+  scaling:
+    minReplicas: 1
+    maxReplicas: 1
+
+# Route configuration
+route:
+  enabled: true
+  # Timeout for long-running inference requests (10 minutes)
+  timeout: "600s"
+  # oauth-proxy upstream timeout (10 minutes)
+  # This is critical for long-running LLM inference
+  oauthProxyUpstreamTimeout: "10m"
+
+# Security configuration
+security:
+  # Enable OAuth authentication via oauth-proxy
+  enableAuth: true

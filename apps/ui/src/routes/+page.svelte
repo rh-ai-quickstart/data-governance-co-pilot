@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-	<title>Data Governance Copilot</title>
+	<title>Data Governance Copilot - EDB PG Airman MCP on OpenShift AI</title>
 </svelte:head>
 
 <div class="app-container">

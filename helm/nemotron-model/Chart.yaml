@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nemotron-model
+description: NVIDIA Nemotron Nano 9B v2 model deployment using KServe
+type: application
+version: 0.1.0
+appVersion: "1.0"

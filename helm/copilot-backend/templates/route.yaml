@@ -10,6 +10,9 @@ metadata:
     heritage: {{ .Release.Service }}
   annotations:
     haproxy.router.openshift.io/timeout: {{ .Values.route.timeout | default "90s" | quote }}
+    haproxy.router.openshift.io/timeout-tunnel: {{ .Values.route.timeout | default "90s" | quote }}
+    haproxy.router.openshift.io/timeout-check: "10s"  # Health check timeout
+    haproxy.router.openshift.io/timeout-client: {{ .Values.route.timeout | default "90s" | quote }}  # Client-side timeout
 spec:
   {{- if .Values.route.host }}
   host: {{ .Values.route.host }}

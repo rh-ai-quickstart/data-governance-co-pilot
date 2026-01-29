@@ -12,6 +12,20 @@ data:
     #!/bin/bash
     set -e
 
+    echo "Waiting for database to be ready..."
+    # Wait for PostgreSQL to be accepting connections
+    until pg_isready -U "$POSTGRESQL_USER" -d postgres -q; do
+      echo "Waiting for PostgreSQL to start..."
+      sleep 1
+    done
+
+    echo "Checking if database exists..."
+    # Check if the database exists, create if it doesn't
+    if ! psql -U "$POSTGRESQL_USER" -d postgres -lqt | cut -d \| -f 1 | grep -qw "$POSTGRESQL_DATABASE"; then
+      echo "Database $POSTGRESQL_DATABASE does not exist, creating it..."
+      psql -U "$POSTGRESQL_USER" -d postgres -c "CREATE DATABASE $POSTGRESQL_DATABASE;"
+    fi
+
     echo "Creating vector extension..."
     psql -v ON_ERROR_STOP=1 --username "$POSTGRESQL_USER" --dbname "$POSTGRESQL_DATABASE" <<-EOSQL
       CREATE EXTENSION IF NOT EXISTS vector CASCADE;
