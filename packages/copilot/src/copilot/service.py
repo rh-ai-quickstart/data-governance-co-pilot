@@ -16,6 +16,10 @@ import uuid
 from typing import Any, AsyncGenerator
 
 # Set up logging
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
@@ -66,13 +70,6 @@ class QueryRequest(BaseModel):
     query: str
     conversation_id: str | None = None
     enable_reasoning: bool = True  # Whether to include reasoning in LLM responses
-
-
-class QueryResponse(BaseModel):
-    """Response model for queries"""
-    response: str
-    tool_calls: list[dict[str, Any]] | None = None
-    conversation_id: str | None = None
 
 
 class PolicyUploadRequest(BaseModel):
@@ -147,7 +144,7 @@ class DataGovernanceCopilot:
 
     async def initialize(self):
         """Initialize MCP connection and discover tools"""
-        print(f"Connecting to pg-airman-mcp at {self.mcp_server_url}...")
+        logger.info(f"Connecting to pg-airman-mcp at {self.mcp_server_url}...")
 
         # Connect to MCP server - store contexts to keep connection alive
         self._mcp_client_context = streamablehttp_client(self.mcp_server_url)
@@ -157,11 +154,11 @@ class DataGovernanceCopilot:
         self.mcp_session = await self._mcp_session_context.__aenter__()
 
         await self.mcp_session.initialize()
-        print("Connected to pg-airman-mcp server!")
+        logger.info("Connected to pg-airman-mcp server!")
 
         # Discover available tools
         tools_response = await self.mcp_session.list_tools()
-        print(f"Discovered {len(tools_response.tools)} MCP tools")
+        logger.info(f"Discovered {len(tools_response.tools)} MCP tools")
 
         # Convert MCP tools to OpenAI function calling format
         self.mcp_tools = self._convert_mcp_tools_to_openai(tools_response.tools)
@@ -231,7 +228,7 @@ class DataGovernanceCopilot:
                     }
                     tool_calls.append(tool_call)
             except (json.JSONDecodeError, KeyError) as e:
-                print(f"Warning: Failed to parse tool call: {e}")
+                logger.warning(f"Failed to parse tool call: {e}")
                 continue
 
         return tool_calls
@@ -248,8 +245,8 @@ class DataGovernanceCopilot:
         if not content:
             return ""
 
-        print(f"[DEBUG] Original content length: {len(content)}")
-        print(f"[DEBUG] Content preview:\n{content}")
+        logger.debug(f"Original content length: {len(content)}")
+        logger.debug(f"Content preview:\n{content}")
 
         # Remove <think>...</think> tags and their content (properly paired)
         content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL | re.IGNORECASE)
@@ -270,8 +267,8 @@ class DataGovernanceCopilot:
         content = re.sub(r'\n\s*\n', '\n\n', content)
         content = content.strip()
 
-        print(f"[DEBUG] Cleaned content length: {len(content)}")
-        print(f"[DEBUG] Cleaned content:\n{content}")
+        logger.debug(f"Cleaned content length: {len(content)}")
+        logger.debug(f"Cleaned content:\n{content}")
 
         return content
 
@@ -299,7 +296,7 @@ class DataGovernanceCopilot:
         # Add governance policy if present
         policy_section = ""
         if governance_policy:
-            print(f"[POLICY] Including governance policy in system prompt ({len(governance_policy)} chars)")
+            logger.info(f"Including governance policy in system prompt ({len(governance_policy)} chars)")
             policy_section = (
                 "DATA GOVERNANCE POLICY:\n"
                 "The following data governance policy MUST be followed when analyzing data, "
@@ -308,7 +305,7 @@ class DataGovernanceCopilot:
                 "Ensure all your responses and actions comply with the above policy.\n\n"
             )
         else:
-            print("[POLICY] No governance policy active - using default system prompt")
+            logger.info("No governance policy active - using default system prompt")
 
         # Guidelines section
         guidelines = (
@@ -325,15 +322,12 @@ class DataGovernanceCopilot:
             "8. Structure your responses with clear headings and sections when appropriate"
         )
 
-        # Reasoning instruction (conditional)
+        # Reasoning instruction using Nemotron's native /think and /no_think tags
         reasoning_instruction = ""
-        if not enable_reasoning:
-            reasoning_instruction = (
-                "\n\nRESPONSE FORMAT:\n"
-                "- Provide direct, concise answers without showing your thinking process\n"
-                "- Do NOT use <think> tags or explain your reasoning steps\n"
-                "- Focus on delivering the final answer immediately\n"
-            )
+        if enable_reasoning:
+            reasoning_instruction = "\n\n/think"
+        else:
+            reasoning_instruction = "\n\n/no_think"
 
         return base_content + policy_section + guidelines + reasoning_instruction
 
@@ -368,6 +362,9 @@ class DataGovernanceCopilot:
             # Get or create conversation history
             if conversation_id and conversation_id in conversation_store:
                 messages = conversation_store[conversation_id].copy()
+                # Update system prompt to match current reasoning setting
+                if messages and messages[0]["role"] == "system":
+                    messages[0]["content"] = self._build_system_prompt(enable_reasoning=enable_reasoning)
                 yield {
                     "type": "conversation_resumed",
                     "conversation_id": conversation_id,
@@ -412,82 +409,226 @@ class DataGovernanceCopilot:
                 tools_tokens = estimate_tokens(json.dumps(self.mcp_tools, default=str))
                 total_with_tools = token_breakdown['total'] + tools_tokens
 
-                print(f"[CONTEXT] Iteration {iteration} - Estimated tokens by role:")
-                print(f"  System: {token_breakdown['system']:,} tokens")
-                print(f"  User: {token_breakdown['user']:,} tokens")
-                print(f"  Assistant: {token_breakdown['assistant']:,} tokens")
-                print(f"  Tool results: {token_breakdown['tool']:,} tokens")
-                print(f"  MCP Tools schema: {tools_tokens:,} tokens ({len(self.mcp_tools)} tools)")
-                print(f"  TOTAL: {total_with_tools:,} tokens (limit: {self.max_context_length:,}) - {(total_with_tools/self.max_context_length*100):.1f}% used")
+                logger.debug(f"Iteration {iteration} - Estimated tokens by role:")
+                logger.debug(f"  System: {token_breakdown['system']:,} tokens")
+                logger.debug(f"  User: {token_breakdown['user']:,} tokens")
+                logger.debug(f"  Assistant: {token_breakdown['assistant']:,} tokens")
+                logger.debug(f"  Tool results: {token_breakdown['tool']:,} tokens")
+                logger.debug(f"  MCP Tools schema: {tools_tokens:,} tokens ({len(self.mcp_tools)} tools)")
+                logger.debug(f"  TOTAL: {total_with_tools:,} tokens (limit: {self.max_context_length:,}) - {(total_with_tools/self.max_context_length*100):.1f}% used")
 
                 if total_with_tools > self.max_context_length:
-                    print(f"[CONTEXT] ⚠️  WARNING: Token estimate ({total_with_tools:,}) exceeds model limit ({self.max_context_length:,})!")
+                    logger.warning(f"Token estimate ({total_with_tools:,}) exceeds model limit ({self.max_context_length:,})!")
 
-                # ===== START [LLM_MESSAGE_DEBUG] - Can be disabled to reduce log verbosity =====
-                print(f"[LLM_MESSAGE_DEBUG] Iteration {iteration} - Sending {len(messages)} messages to LLM:")
-                for idx, msg in enumerate(messages):
-                    role = msg.get('role', 'unknown')
-                    content_preview = str(msg.get('content', ''))[:200] if msg.get('content') else '[no content]'
-                    tool_calls_count = len(msg.get('tool_calls', [])) if msg.get('tool_calls') else 0
 
-                    print(f"[LLM_MESSAGE_DEBUG]   Message {idx + 1}: role={role}, content_len={len(str(msg.get('content', '')))}, tool_calls={tool_calls_count}")
-                    print(f"[LLM_MESSAGE_DEBUG]     Content preview: {content_preview}...")
-
-                    if msg.get('tool_calls'):
-                        for tc_idx, tc in enumerate(msg.get('tool_calls', [])):
-                            tc_name = tc.get('function', {}).get('name', 'unknown') if isinstance(tc.get('function'), dict) else 'unknown'
-                            print(f"[LLM_MESSAGE_DEBUG]       Tool call {tc_idx + 1}: {tc_name}")
-
-                print(f"[LLM_MESSAGE_DEBUG] Full messages array:")
-                print(f"[LLM_MESSAGE_DEBUG] {json.dumps(messages, indent=2, default=str)}")
-
-                # Log MCP tools being sent (this consumes significant context!)
-                tools_json = json.dumps(self.mcp_tools, indent=2, default=str)
-                tools_chars = len(tools_json)
-                tools_tokens = estimate_tokens(tools_json)
-                print(f"[LLM_MESSAGE_DEBUG] MCP Tools parameter:")
-                print(f"[LLM_MESSAGE_DEBUG]   Tool count: {len(self.mcp_tools)}")
-                print(f"[LLM_MESSAGE_DEBUG]   Tools JSON size: {tools_chars:,} characters (~{tools_tokens:,} tokens)")
-                print(f"[LLM_MESSAGE_DEBUG]   Tool names: {[t.get('function', {}).get('name', 'unknown') for t in self.mcp_tools]}")
-                print(f"[LLM_MESSAGE_DEBUG] Full tools array:")
-                print(f"[LLM_MESSAGE_DEBUG] {tools_json}")
-                # ===== END [LLM_MESSAGE_DEBUG] =====
-
-                # Call LLM with available tools
-                # Send heartbeat events to keep SSE connection alive during long LLM calls
+                # Call LLM with available tools using streaming mode
+                # Streaming solves oauth-proxy timeout by sending response headers immediately
+                # and keeps connection alive while streaming tokens to UI in real-time
                 llm_start = time.time()
                 try:
-                    # Create the LLM call as a background task
-                    llm_task = asyncio.create_task(
-                        self.llm_client.chat.completions.create(
-                            model=self.llm_model,
-                            messages=messages,
-                            tools=self.mcp_tools,
-                            tool_choice="auto",
-                            max_tokens=2048,
-                            temperature=0.1,
-                            top_p=0.95,
-                        )
-                    )
+                    # Use streaming mode to avoid oauth-proxy timeout
+                    # Build API call parameters
+                    api_params = {
+                        "model": self.llm_model,
+                        "messages": messages,
+                        "tools": self.mcp_tools,
+                        "tool_choice": "auto",
+                        "max_tokens": 2048,
+                        "temperature": 0.1,
+                        "top_p": 0.95,
+                        "stream": True  # Enable streaming to keep connection alive and stream to UI
+                    }
 
-                    # Send heartbeat events every 10 seconds while waiting
-                    while not llm_task.done():
-                        try:
-                            await asyncio.wait_for(asyncio.shield(llm_task), timeout=10.0)
-                        except asyncio.TimeoutError:
-                            # Send heartbeat to keep connection alive
-                            elapsed = time.time() - llm_start
+                    stream = await self.llm_client.chat.completions.create(**api_params)
+
+                    # Stream response while handling thinking content
+                    # NOTE: vLLM filters the FIRST <think> tag but allows subsequent ones and all </think> tags
+                    # Strategy when reasoning enabled: Everything before first </think> is thinking, then parse normally
+                    # Strategy when reasoning disabled: Stream all content as response
+                    # NOTE: Tool calls come as <TOOLCALL> tags in text content, not in delta.tool_calls
+                    accumulated_content = ""
+                    first_close_tag_found = False if enable_reasoning else True  # Skip thinking logic if disabled
+                    inside_think_tag = False
+                    content_buffer = ""  # Buffer to handle tags split across chunks
+
+                    async for chunk in stream:
+                        delta = chunk.choices[0].delta
+
+                        # Process content (accumulate in buffer to handle split tags)
+                        if delta.content:
+                            content_buffer += delta.content
+                            logger.debug(f" Received chunk: {repr(delta.content[:100])}, buffer size: {len(content_buffer)}, first_close_tag_found={first_close_tag_found}, inside_think_tag={inside_think_tag}")
+
+                            while content_buffer:
+                                if enable_reasoning and not first_close_tag_found:
+                                    # Reasoning enabled: streaming first thinking block (no opening tag from vLLM)
+                                    close_idx = content_buffer.lower().find('</think>')
+                                    if close_idx != -1:
+                                        # Found first </think> - send thinking before it
+                                        if content_buffer[:close_idx]:
+                                            logger.debug(f" Sending thinking (before first close tag): {repr(content_buffer[:close_idx][:50])}")
+                                            yield {
+                                                "type": "llm_thinking",
+                                                "content": content_buffer[:close_idx],
+                                                "iteration": iteration
+                                            }
+                                        first_close_tag_found = True
+                                        content_buffer = content_buffer[close_idx + 8:]  # Skip </think>
+                                        logger.debug(f" Found first </think>, buffer after: {repr(content_buffer[:50])}")
+                                    else:
+                                        # No closing tag found yet - send all but last 8 chars (tag length)
+                                        # Keep last 8 chars in buffer in case tag is being split
+                                        if len(content_buffer) > 8:
+                                            to_send = content_buffer[:-8]
+                                            content_buffer = content_buffer[-8:]
+                                            logger.debug(f" Sending thinking (no close tag yet): {repr(to_send[:50])}")
+                                            yield {
+                                                "type": "llm_thinking",
+                                                "content": to_send,
+                                                "iteration": iteration
+                                            }
+                                        break
+                                elif inside_think_tag:
+                                    # Inside a subsequent <think> block
+                                    close_idx = content_buffer.lower().find('</think>')
+                                    if close_idx != -1:
+                                        # Found closing tag - send thinking before it
+                                        if content_buffer[:close_idx]:
+                                            logger.debug(f" Sending thinking (inside block): {repr(content_buffer[:close_idx][:50])}")
+                                            yield {
+                                                "type": "llm_thinking",
+                                                "content": content_buffer[:close_idx],
+                                                "iteration": iteration
+                                            }
+                                        inside_think_tag = False
+                                        content_buffer = content_buffer[close_idx + 8:]
+                                        logger.debug(f" Exited think block, buffer: {repr(content_buffer[:50])}")
+                                    else:
+                                        # No closing tag - send all but last 8 chars
+                                        if len(content_buffer) > 8:
+                                            to_send = content_buffer[:-8]
+                                            content_buffer = content_buffer[-8:]
+                                            logger.debug(f" Sending thinking (inside block, no close yet): {repr(to_send[:50])}")
+                                            yield {
+                                                "type": "llm_thinking",
+                                                "content": to_send,
+                                                "iteration": iteration
+                                            }
+                                        break
+                                else:
+                                    # Outside thinking blocks - check for tags or stream as response
+                                    # Check for <TOOLCALL> tag first (don't stream tool calls)
+                                    toolcall_start = content_buffer.lower().find('<toolcall>')
+                                    if toolcall_start != -1:
+                                        # Found <TOOLCALL> - stream content before it, then skip to </TOOLCALL>
+                                        if content_buffer[:toolcall_start]:
+                                            accumulated_content += content_buffer[:toolcall_start]
+                                            logger.debug(f" Sending response (before <TOOLCALL>): {repr(content_buffer[:toolcall_start][:50])}")
+                                            yield {
+                                                "type": "llm_content_delta",
+                                                "content": content_buffer[:toolcall_start],
+                                                "iteration": iteration
+                                            }
+                                        # Find </TOOLCALL> and skip entire tool call block
+                                        toolcall_end = content_buffer.lower().find('</toolcall>', toolcall_start)
+                                        if toolcall_end != -1:
+                                            # Skip entire <TOOLCALL>...</TOOLCALL> block (but keep in accumulated_content for parsing)
+                                            toolcall_block = content_buffer[toolcall_start:toolcall_end + 11]
+                                            accumulated_content += toolcall_block
+                                            content_buffer = content_buffer[toolcall_end + 11:]
+                                            logger.debug(f" Skipped TOOLCALL block, buffer after: {repr(content_buffer[:50])}")
+                                        else:
+                                            # </TOOLCALL> not found yet - keep last 11 chars in buffer
+                                            if len(content_buffer) > 11:
+                                                to_keep = content_buffer[toolcall_start:]
+                                                accumulated_content += content_buffer[:toolcall_start]
+                                                content_buffer = to_keep
+                                            break
+                                    else:
+                                        # Check for <think> tag
+                                        open_idx = content_buffer.lower().find('<think>') if enable_reasoning else -1
+                                        if open_idx != -1:
+                                            # Found opening tag - stream content before it as response (accumulate)
+                                            if content_buffer[:open_idx]:
+                                                accumulated_content += content_buffer[:open_idx]
+                                                logger.debug(f" Sending response (before <think>): {repr(content_buffer[:open_idx][:50])}")
+                                                yield {
+                                                    "type": "llm_content_delta",
+                                                    "content": content_buffer[:open_idx],
+                                                    "iteration": iteration
+                                                }
+                                            content_buffer = content_buffer[open_idx + 7:]  # Skip <think>
+                                            inside_think_tag = True
+                                            logger.debug(f" Entering think block, buffer: {repr(content_buffer[:50])}")
+                                        else:
+                                            # No tag - send all but last 11 chars (in case <TOOLCALL> or <think> is being split)
+                                            if len(content_buffer) > 11:
+                                                to_send = content_buffer[:-11]
+                                                content_buffer = content_buffer[-11:]
+                                                accumulated_content += to_send
+                                                logger.debug(f" Sending response (no tags): {repr(to_send[:50])}")
+                                                yield {
+                                                    "type": "llm_content_delta",
+                                                    "content": to_send,
+                                                    "iteration": iteration
+                                                }
+                                            break
+
+                    # Flush any remaining buffer content at end of stream
+                    if content_buffer:
+                        logger.debug(f" Flushing remaining buffer ({len(content_buffer)} chars): {repr(content_buffer[:50])}")
+                        if enable_reasoning and not first_close_tag_found:
+                            # Still in thinking mode - send as thinking
                             yield {
-                                "type": "llm_progress",
-                                "message": f"LLM thinking... ({elapsed:.0f}s)",
+                                "type": "llm_thinking",
+                                "content": content_buffer,
                                 "iteration": iteration
                             }
+                        elif inside_think_tag:
+                            # Inside think tag - send as thinking
+                            yield {
+                                "type": "llm_thinking",
+                                "content": content_buffer,
+                                "iteration": iteration
+                            }
+                        else:
+                            # Outside thinking - send as response and accumulate
+                            accumulated_content += content_buffer
+                            yield {
+                                "type": "llm_content_delta",
+                                "content": content_buffer,
+                                "iteration": iteration
+                            }
+                        content_buffer = ""
 
-                    response = await llm_task
                     llm_elapsed = time.time() - llm_start
                     total_llm_time += llm_elapsed
 
-                    message = response.choices[0].message
+                    # Create a message object from accumulated data
+                    # Parse tool calls from accumulated content (vLLM doesn't populate delta.tool_calls during streaming)
+                    logger.debug(f" End of stream - accumulated_content: {repr(accumulated_content[:200] if accumulated_content else None)}")
+                    parsed_tool_calls = self._parse_tool_calls_from_text(accumulated_content) if accumulated_content else []
+                    logger.debug(f" Parsed {len(parsed_tool_calls)} tool calls from text")
+
+                    # Clean accumulated content to remove thinking and tool call tags
+                    cleaned_content = self._clean_response_text(accumulated_content) if accumulated_content else None
+                    logger.debug(f" After cleaning - cleaned_content: {repr(cleaned_content[:200] if cleaned_content else None)}")
+
+                    from types import SimpleNamespace
+                    message = SimpleNamespace(
+                        content=cleaned_content,
+                        tool_calls=[
+                            SimpleNamespace(
+                                id=tc["id"],
+                                type=tc["type"],
+                                function=SimpleNamespace(
+                                    name=tc["function"]["name"],
+                                    arguments=tc["function"]["arguments"]
+                                )
+                            )
+                            for tc in parsed_tool_calls
+                        ] if parsed_tool_calls else None
+                    )
                 except Exception as e:
                     llm_elapsed = time.time() - llm_start
                     logger.error(f"LLM call failed in iteration {iteration}: {e}")
@@ -502,42 +643,19 @@ class DataGovernanceCopilot:
                     }
                     return
 
-                # Extract thinking content if present
-                if message.content:
-                    thinking_content = None
-
-                    # First try to find properly paired <think>...</think> tags
-                    think_pattern = r'<think>(.*?)</think>'
-                    think_matches = re.findall(think_pattern, message.content, re.DOTALL | re.IGNORECASE)
-
-                    if think_matches:
-                        # Use the first matched thinking content
-                        thinking_content = think_matches[0].strip()
-                    elif '</think>' in message.content.lower():
-                        # Handle orphan </think> tag (LLM sometimes outputs thinking without opening tag)
-                        # Extract everything before the </think> tag as thinking content
-                        parts = re.split(r'</think>', message.content, flags=re.IGNORECASE)
-                        if len(parts) > 1 and parts[0].strip():
-                            thinking_content = parts[0].strip()
-
-                    if thinking_content:
-                        yield {
-                            "type": "llm_thinking",
-                            "content": thinking_content,
-                            "iteration": iteration,
-                            "llm_time": llm_elapsed
-                        }
+                # Note: Thinking content is now streamed in real-time during the streaming loop above
+                # No need to extract it again here
 
                 # Parse tool calls from message
                 tool_calls = message.tool_calls if message.tool_calls else []
-                print(f"[DEBUG] message.tool_calls: {tool_calls}")
+                logger.debug(f" message.tool_calls: {tool_calls}")
                 if not tool_calls and message.content:
                     tool_calls = self._parse_tool_calls_from_text(message.content)
-                    print(f"[DEBUG] Parsed tool_calls from text: {tool_calls}")
+                    logger.debug(f" Parsed tool_calls from text: {tool_calls}")
 
                 # If no tool calls, we have the final answer
                 if not tool_calls:
-                    print(f"[DEBUG] No tool calls found, treating as final answer")
+                    logger.debug(f" No tool calls found, treating as final answer")
                     cleaned_response = self._clean_response_text(message.content)
 
                     # Save assistant response to conversation history
@@ -585,10 +703,10 @@ class DataGovernanceCopilot:
                 # Execute tool calls via MCP
                 # IMPORTANT: Clean thinking content before adding to context
                 # Thinking is streamed to UI but shouldn't consume context window
-                print(f"[DEBUG] Executing {len(tool_calls)} tool calls")
+                logger.debug(f" Executing {len(tool_calls)} tool calls")
                 cleaned_content = self._clean_response_text(message.content) if message.content else ""
 
-                print(f"[DEBUG] Building tool_calls structure for messages array")
+                logger.debug(f" Building tool_calls structure for messages array")
                 try:
                     tool_calls_for_message = [
                         {
@@ -601,9 +719,9 @@ class DataGovernanceCopilot:
                         }
                         for tc in tool_calls
                     ]
-                    print(f"[DEBUG] Tool calls structure built successfully")
+                    logger.debug(f" Tool calls structure built successfully")
                 except Exception as e:
-                    print(f"[DEBUG] Error building tool_calls structure: {e}")
+                    logger.debug(f" Error building tool_calls structure: {e}")
                     raise
 
                 messages.append({
@@ -612,7 +730,7 @@ class DataGovernanceCopilot:
                     "tool_calls": tool_calls_for_message
                 })
 
-                print(f"[DEBUG] Starting tool execution loop")
+                logger.debug(f" Starting tool execution loop")
                 for tool_call in tool_calls:
                     # Handle both dict and object formats
                     if isinstance(tool_call, dict):
@@ -690,256 +808,6 @@ class DataGovernanceCopilot:
                 "traceback": traceback.format_exc()
             }
 
-    async def process_query(self, user_query: str, conversation_id: str | None = None) -> dict[str, Any]:
-        """
-        Process user query through LLM with MCP tool support.
-
-        Implements agentic loop:
-        1. Send query to LLM with available tools
-        2. If LLM wants to use tools, execute them via MCP
-        3. Send tool results back to LLM
-        4. Repeat until LLM returns final answer
-
-        Args:
-            user_query: The user's question or request
-            conversation_id: Optional conversation ID for maintaining context across queries
-        """
-        # Start overall timing
-        query_start_time = time.time()
-        total_llm_time = 0.0
-        total_mcp_time = 0.0
-        print(f"\n{'='*80}")
-        print(f"[TIMING] Starting query processing at {time.strftime('%H:%M:%S')}")
-        print(f"[TIMING] Query: {user_query[:100]}{'...' if len(user_query) > 100 else ''}")
-        print(f"{'='*80}\n")
-
-        # Get or create conversation history
-        if conversation_id and conversation_id in conversation_store:
-            messages = conversation_store[conversation_id].copy()
-            print(f"Resuming conversation {conversation_id} with {len(messages)} messages")
-        else:
-            # Start new conversation with system prompt (including policy if present)
-            messages = [
-                {
-                    "role": "system",
-                    "content": self._build_system_prompt(enable_reasoning=True)
-                }
-            ]
-            if conversation_id:
-                conversation_store[conversation_id] = messages
-                print(f"Started new conversation {conversation_id}")
-
-        # Add user query to conversation
-        messages.append({
-            "role": "user",
-            "content": user_query
-        })
-
-        tool_calls_made = []
-        max_iterations = 100  # Allow many iterations for complex multi-step reasoning
-        iteration = 0
-
-        while iteration < max_iterations:
-            iteration += 1
-
-            # Estimate and log token usage before LLM call (including MCP tools schema)
-            token_breakdown = estimate_messages_tokens(messages)
-            tools_tokens = estimate_tokens(json.dumps(self.mcp_tools, default=str))
-            total_with_tools = token_breakdown['total'] + tools_tokens
-
-            print(f"[CONTEXT] Iteration {iteration} - Estimated tokens by role:")
-            print(f"  System: {token_breakdown['system']:,} tokens")
-            print(f"  User: {token_breakdown['user']:,} tokens")
-            print(f"  Assistant: {token_breakdown['assistant']:,} tokens")
-            print(f"  Tool results: {token_breakdown['tool']:,} tokens")
-            print(f"  MCP Tools schema: {tools_tokens:,} tokens ({len(self.mcp_tools)} tools)")
-            print(f"  TOTAL: {total_with_tools:,} tokens (limit: {self.max_context_length:,}) - {(total_with_tools/self.max_context_length*100):.1f}% used")
-
-            if total_with_tools > self.max_context_length:
-                print(f"[CONTEXT] ⚠️  WARNING: Token estimate ({total_with_tools:,}) exceeds model limit ({self.max_context_length:,})!")
-
-            # ===== START [LLM_MESSAGE_DEBUG] - Can be disabled to reduce log verbosity =====
-            print(f"[LLM_MESSAGE_DEBUG] Iteration {iteration} - Sending {len(messages)} messages to LLM:")
-            for idx, msg in enumerate(messages):
-                role = msg.get('role', 'unknown')
-                content_preview = str(msg.get('content', ''))[:200] if msg.get('content') else '[no content]'
-                tool_calls_count = len(msg.get('tool_calls', [])) if msg.get('tool_calls') else 0
-
-                print(f"[LLM_MESSAGE_DEBUG]   Message {idx + 1}: role={role}, content_len={len(str(msg.get('content', '')))}, tool_calls={tool_calls_count}")
-                print(f"[LLM_MESSAGE_DEBUG]     Content preview: {content_preview}...")
-
-                if msg.get('tool_calls'):
-                    for tc_idx, tc in enumerate(msg.get('tool_calls', [])):
-                        tc_name = tc.get('function', {}).get('name', 'unknown') if isinstance(tc.get('function'), dict) else 'unknown'
-                        print(f"[LLM_MESSAGE_DEBUG]       Tool call {tc_idx + 1}: {tc_name}")
-
-            print(f"[LLM_MESSAGE_DEBUG] Full messages array:")
-            print(f"[LLM_MESSAGE_DEBUG] {json.dumps(messages, indent=2, default=str)}")
-
-            # Log MCP tools being sent (this consumes significant context!)
-            tools_json = json.dumps(self.mcp_tools, indent=2, default=str)
-            tools_chars = len(tools_json)
-            tools_tokens_est = estimate_tokens(tools_json)
-            print(f"[LLM_MESSAGE_DEBUG] MCP Tools parameter:")
-            print(f"[LLM_MESSAGE_DEBUG]   Tool count: {len(self.mcp_tools)}")
-            print(f"[LLM_MESSAGE_DEBUG]   Tools JSON size: {tools_chars:,} characters (~{tools_tokens_est:,} tokens)")
-            print(f"[LLM_MESSAGE_DEBUG]   Tool names: {[t.get('function', {}).get('name', 'unknown') for t in self.mcp_tools]}")
-            print(f"[LLM_MESSAGE_DEBUG] Full tools array:")
-            print(f"[LLM_MESSAGE_DEBUG] {tools_json}")
-            # ===== END [LLM_MESSAGE_DEBUG] =====
-
-            # Call LLM with available tools
-            print(f"[TIMING] Iteration {iteration}: Calling LLM...")
-            llm_start = time.time()
-            response = await self.llm_client.chat.completions.create(
-                model=self.llm_model,
-                messages=messages,
-                tools=self.mcp_tools,
-                tool_choice="auto",
-                max_tokens=2048,        # Limit output length for faster generation
-                temperature=0.1,        # Lower temperature = faster, more deterministic
-                top_p=0.95,            # Slightly restrict sampling
-            )
-            llm_elapsed = time.time() - llm_start
-            total_llm_time += llm_elapsed
-            print(f"[TIMING] Iteration {iteration}: LLM call completed in {llm_elapsed:.2f}s (cumulative: {total_llm_time:.2f}s)")
-
-            message = response.choices[0].message
-
-            # Parse tool calls from message (either structured or from text)
-            tool_calls = message.tool_calls if message.tool_calls else []
-
-            # If no structured tool calls, try parsing from text content
-            if not tool_calls and message.content:
-                tool_calls = self._parse_tool_calls_from_text(message.content)
-
-            # If still no tool calls, we have the final answer
-            if not tool_calls:
-                cleaned_response = self._clean_response_text(message.content)
-
-                # Save assistant response to conversation history
-                messages.append({
-                    "role": "assistant",
-                    "content": cleaned_response
-                })
-
-                # Update conversation store
-                if conversation_id:
-                    conversation_store[conversation_id] = messages
-                    print(f"Saved conversation {conversation_id} with {len(messages)} messages")
-
-                # Print timing summary
-                query_total_time = time.time() - query_start_time
-                backend_overhead = query_total_time - total_llm_time - total_mcp_time
-                print(f"\n{'='*80}")
-                print(f"[TIMING] Query completed successfully in {iteration} iterations")
-                print(f"[TIMING] Total time: {query_total_time:.2f}s")
-                print(f"[TIMING] - LLM time: {total_llm_time:.2f}s ({total_llm_time/query_total_time*100:.1f}%)")
-                print(f"[TIMING] - MCP time: {total_mcp_time:.2f}s ({total_mcp_time/query_total_time*100:.1f}%)")
-                print(f"[TIMING] - Backend overhead: {backend_overhead:.2f}s ({backend_overhead/query_total_time*100:.1f}%)")
-                print(f"[TIMING] - Tool calls made: {len(tool_calls_made)}")
-                print(f"{'='*80}\n")
-
-                return {
-                    "response": cleaned_response,
-                    "tool_calls": tool_calls_made
-                }
-
-            # Execute tool calls via MCP
-            # IMPORTANT: Clean thinking content before adding to context
-            # Thinking is useful for logging but shouldn't consume context window
-            cleaned_content = self._clean_response_text(message.content) if message.content else ""
-
-            messages.append({
-                "role": "assistant",
-                "content": cleaned_content,
-                "tool_calls": [
-                    {
-                        "id": tc.id if hasattr(tc, 'id') else tc["id"],
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name if hasattr(tc, 'function') else tc["function"]["name"],
-                            "arguments": tc.function.arguments if hasattr(tc, 'function') else tc["function"]["arguments"]
-                        }
-                    }
-                    for tc in tool_calls
-                ]
-            })
-
-            for tool_call in tool_calls:
-                # Handle both dict and object formats
-                if isinstance(tool_call, dict):
-                    tool_name = tool_call["function"]["name"]
-                    tool_args = json.loads(tool_call["function"]["arguments"]) if isinstance(tool_call["function"]["arguments"], str) else tool_call["function"]["arguments"]
-                    tool_call_id = tool_call["id"]
-                else:
-                    tool_name = tool_call.function.name
-                    tool_args = json.loads(tool_call.function.arguments)
-                    tool_call_id = tool_call.id
-
-                print(f"[TIMING] Iteration {iteration}: Executing MCP tool '{tool_name}'...")
-                mcp_start = time.time()
-
-                # Execute tool via MCP with timeout
-                try:
-                    # 5 minute timeout per tool call
-                    tool_result = await asyncio.wait_for(
-                        self.mcp_session.call_tool(tool_name, tool_args),
-                        timeout=300.0
-                    )
-                except asyncio.TimeoutError:
-                    tool_result = {"error": f"Tool '{tool_name}' timed out after 5 minutes"}
-                    logger.error(f"MCP tool call {tool_name} timed out")
-
-                mcp_elapsed = time.time() - mcp_start
-                total_mcp_time += mcp_elapsed
-                print(f"[TIMING] Iteration {iteration}: MCP tool '{tool_name}' completed in {mcp_elapsed:.2f}s (cumulative: {total_mcp_time:.2f}s)")
-
-                # Track tool calls for response
-                tool_calls_made.append({
-                    "tool": tool_name,
-                    "arguments": tool_args,
-                    "result": str(tool_result)
-                })
-
-                # Log tool result size
-                tool_result_str = str(tool_result)
-                tool_result_tokens = estimate_tokens(tool_result_str)
-                print(f"[CONTEXT] Tool {tool_name} returned {len(tool_result_str):,} chars (~{tool_result_tokens:,} tokens)")
-
-                # Add tool result to conversation
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": tool_result_str
-                })
-
-        # If we hit max iterations, return what we have with helpful message
-        query_total_time = time.time() - query_start_time
-        backend_overhead = query_total_time - total_llm_time - total_mcp_time
-        print(f"\n{'='*80}")
-        print(f"[TIMING] Query exceeded max iterations ({max_iterations})")
-        print(f"[TIMING] Total time: {query_total_time:.2f}s")
-        print(f"[TIMING] - LLM time: {total_llm_time:.2f}s ({total_llm_time/query_total_time*100:.1f}%)")
-        print(f"[TIMING] - MCP time: {total_mcp_time:.2f}s ({total_mcp_time/query_total_time*100:.1f}%)")
-        print(f"[TIMING] - Backend overhead: {backend_overhead:.2f}s ({backend_overhead/query_total_time*100:.1f}%)")
-        print(f"[TIMING] - Tool calls made: {len(tool_calls_made)}")
-        print(f"{'='*80}\n")
-        print(f"WARNING: Query exceeded max iterations ({max_iterations}) with {len(tool_calls_made)} tool calls")
-        return {
-            "response": (
-                f"I apologize, but I wasn't able to complete this query after {max_iterations} attempts. "
-                "The query appears too complex for automated resolution. Here's what I tried:\n\n"
-                f"- Made {len(tool_calls_made)} tool calls\n"
-                "- The issue seems to involve complex table relationships\n\n"
-                "Please try:\n"
-                "1. Breaking the query into simpler steps\n"
-                "2. Asking for schema information first\n"
-                "3. Being more specific about table names and relationships"
-            ),
-            "tool_calls": tool_calls_made
-        }
-
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -988,32 +856,6 @@ async def health_check():
     }
 
 
-@app.post("/query", response_model=QueryResponse)
-async def query(request: QueryRequest):
-    """
-    Process user query through LLM with MCP tool support.
-
-    The copilot will:
-    1. Send query to Nemotron LLM
-    2. Execute any requested MCP tools
-    3. Return final answer with tool execution details
-    """
-    if not copilot:
-        raise HTTPException(status_code=503, detail="Copilot not initialized")
-
-    try:
-        result = await copilot.process_query(request.query, request.conversation_id)
-        return QueryResponse(
-            response=result["response"],
-            tool_calls=result.get("tool_calls"),
-            conversation_id=request.conversation_id
-        )
-    except Exception as e:
-        error_details = traceback.format_exc()
-        print(f"[ERROR] Query processing failed: {error_details}")
-        raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
-
-
 @app.post("/query/stream")
 async def query_stream(request: QueryRequest):
     """
@@ -1034,7 +876,11 @@ async def query_stream(request: QueryRequest):
     async def event_generator():
         """Generate SSE formatted events"""
         try:
-            async for event in copilot.process_query_stream(request.query, request.conversation_id, request.enable_reasoning):
+            async for event in copilot.process_query_stream(
+                request.query,
+                request.conversation_id,
+                request.enable_reasoning
+            ):
                 # Format as SSE: data: {json}\n\n
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
@@ -1111,8 +957,8 @@ async def upload_policy(request: PolicyUploadRequest):
         raise HTTPException(status_code=400, detail="Policy text cannot be empty")
 
     governance_policy = request.policy_text.strip()
-    print(f"[POLICY] Policy uploaded successfully - {len(governance_policy)} characters")
-    print(f"[POLICY] Policy preview: {governance_policy[:200]}...")
+    logger.info(f"Policy uploaded successfully - {len(governance_policy)} characters")
+    logger.info(f"Policy preview: {governance_policy[:200]}...")
 
     return PolicyResponse(
         status="uploaded",
@@ -1132,7 +978,7 @@ async def delete_policy():
     if governance_policy is None:
         raise HTTPException(status_code=404, detail="No policy currently active")
 
-    print("[POLICY] Policy deleted - new conversations will use default system prompt")
+    logger.info("Policy deleted - new conversations will use default system prompt")
     governance_policy = None
 
     return PolicyResponse(
