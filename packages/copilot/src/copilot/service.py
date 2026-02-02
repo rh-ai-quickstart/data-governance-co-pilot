@@ -305,7 +305,7 @@ class DataGovernanceCopilot:
             "This includes data masking and formatting rules "
             "and limits on how many rows to return. "
             "When users ask broadly about the database, first list all object types " 
-            "(tables, views, sequences, etc.) in each schema to provide a holistic overview "
+            "including tables and views in each schema to provide a holistic overview "
             "before drilling down. When asked to describe the database, "
             "provide a summary of key objects (tables and views) that hold business data "
             "with their purposes and data sensitivity (e.g., PII, deprecated status). "
@@ -340,12 +340,13 @@ class DataGovernanceCopilot:
             "2. Minimize tool calls - inspect schemas first, then construct queries carefully\n"
             "3. If you encounter repeated errors, explain the issue to the user instead of retrying endlessly\n"
             "4. When joining tables, always verify foreign key relationships using get_object_details first\n\n"
+            "5. When considering candidate data sources for a query, always consider tables and views. "
             "FORMATTING GUIDELINES:\n"
-            "5. When presenting tabular data (query results, column listings, table schemas, etc.), "
+            "6. When presenting tabular data (query results, column listings, table schemas, etc.), "
             "ALWAYS format as Markdown tables for better readability\n"
-            "6. Use ```sql code blocks for SQL queries to enable syntax highlighting\n"
-            "7. Use code blocks for any code snippets (Python, shell commands, etc.)\n"
-            "8. Structure your responses with clear headings and sections when appropriate"
+            "7. Use ```sql code blocks for SQL queries to enable syntax highlighting\n"
+            "8. Use code blocks for any code snippets (Python, shell commands, etc.)\n"
+            "9. Structure your responses with clear headings and sections when appropriate"
         )
 
         # Reasoning instruction using Nemotron's native /think and /no_think tags
