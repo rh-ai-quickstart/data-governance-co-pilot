@@ -31,7 +31,7 @@ llm:
   # Maximum context length (tokens) for the LLM model
   # Should match or be slightly less than the model's --max-model-len setting
   # Default: 8096 (matches NVIDIA Nemotron Nano 9B v2 default)
-  maxContextLength: 32768
+  maxContextLength: 32768 #Note: When deploying your own model, you must configure your model with a max length as well. It may equal to or greater than this value.
 
 resources:
   limits:

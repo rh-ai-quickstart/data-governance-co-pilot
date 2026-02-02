@@ -62,7 +62,7 @@ If running the backend locally via port-forward:
 oc port-forward service/copilot-backend 8080:8080 -n your-namespace
 ```
 
-Then the UI will connect to `http://localhost:8080/query`
+Then the UI will connect to `http://localhost:8080/query/stream` (SSE streaming endpoint)
 
 ## Building for Production
 
@@ -115,7 +115,7 @@ This shows exactly which pg-airman-mcp tools were executed to answer your questi
 User Types Query
   ↓
 Svelte UI (this app)
-  ↓ POST /query
+  ↓ POST /query/stream (SSE)
 Copilot Backend (FastAPI)
   ↓ OpenAI API
 Nemotron LLM
@@ -230,14 +230,27 @@ SvelteKit supports HMR - changes to `.svelte` files will update instantly withou
 
 ### Testing with Mock Backend
 
-For UI development without the backend, you can mock the `/query` endpoint:
+For UI development without the backend, you can mock the `/query/stream` SSE endpoint by replacing the streaming logic in ChatInterface.svelte with mock events:
 
 ```javascript
-// In ChatInterface.svelte, replace the fetch with:
-const data = {
-  response: "This is a mock response for testing",
+// In ChatInterface.svelte, replace the SSE stream processing with:
+// Mock iteration start
+yield { type: 'iteration_start', iteration: 1, max_iterations: 100 };
+
+// Mock tool call
+yield {
+  type: 'tool_call',
+  tool_name: 'list_schemas',
+  arguments: {},
+  iteration: 1
+};
+
+// Mock final response
+yield {
+  type: 'final_response',
+  content: 'This is a mock response for testing',
   tool_calls: [
-    { tool: "list_schemas", arguments: {}, result: "..." }
+    { tool: 'list_schemas', arguments: {}, result: '...' }
   ]
 };
 ```

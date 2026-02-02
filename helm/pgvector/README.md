@@ -2,6 +2,9 @@
 
 This Helm chart deploys PostgreSQL with the pgvector extension and automatically loads sample e-commerce data.
 
+**Important:** This deployment of the PostgreSQL database is not intended for production use. Data backups and fault tolerance are
+not provisioned. For production, consider running a robust fault-tolerant solution provided by Enterprise Database (EDB) on OpenShift.
+
 ## Architecture
 
 The chart includes:
@@ -16,11 +19,13 @@ Due to ConfigMap size limits (3MB max), we use a **custom container image** appr
 
 1. CSV files (~45MB) are uploaded to OpenShift using a **Binary Build**
 2. The image is built **inside OpenShift** (no external registry or local podman required)
-3. A Kubernetes Job uses this image to load data into PostgreSQL
+3. An OpenShift Job uses this image to load data into PostgreSQL
 
 ### Building the Data Loader Image
 
-The Makefile automatically builds the image inside OpenShift during installation:
+The Makefile automatically builds the image inside OpenShift during installation.
+
+See the readme file in the root helm directory.
 
 ```bash
 make build-data-loader-image NAMESPACE=<your-namespace>
@@ -53,16 +58,6 @@ The data loader creates:
 ## Installation
 
 See the main Makefile in `helm/` directory:
-
-```bash
-cd helm
-make install NAMESPACE=myns \
-  postgres.userId=admin \
-  postgres.password=secret123 \
-  postgres.databaseName=ecommerce \
-  minio.userId=minio \
-  minio.password=minio123
-```
 
 ## Monitoring Data Load
 

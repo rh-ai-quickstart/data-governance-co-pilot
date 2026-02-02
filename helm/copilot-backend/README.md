@@ -11,12 +11,12 @@ The copilot backend acts as the orchestration layer in a 3-pod architecture:
 │  Svelte UI      │  Pod 1: Frontend (static web UI)
 │  (Frontend)     │
 └────────┬────────┘
-         │ HTTP POST /query
+         │ HTTP POST /query/stream (SSE)
          ↓
 ┌─────────────────┐
 │ Copilot Backend │  Pod 2: FastAPI orchestration layer
 │  (This Chart)   │  - Connects to Nemotron LLM
-└────┬────────┬───┘  - Executes MCP tools
+└────┬────────┬───┘  - Executes MCP tools (using Streaming HTTP)
      │        │      - Implements agentic loop
      │        │
      ↓        ↓
@@ -30,72 +30,19 @@ OpenShift AI)  analysis tools)
 
 ## Features
 
-- **FastAPI REST API** with `/query` endpoint for processing user questions
+- **FastAPI streaming API** with `/query/stream` endpoint (SSE) for real-time progress updates
 - **OpenAI-compatible LLM integration** for Nemotron model
 - **MCP tool orchestration** - automatic tool discovery and execution
 - **Multi-turn conversations** - handles complex queries requiring multiple tool calls
 - **Health checks** - `/health` endpoint for readiness/liveness probes
 - **OpenShift Route** - automatic HTTPS ingress with TLS termination
 
-## Prerequisites
+## Installation and Prerequisites
+
+See the helm chart root directory for installation directions and prerequisites.
 
 1. **pg-airman-mcp server** must be deployed first:
-   ```bash
-   make pg-airman-mcp-install NAMESPACE=your-namespace \
-     postgres.userId=postgres \
-     postgres.password=yourpass \
-     postgres.databaseName=yourdb
-   ```
-
 2. **Nemotron LLM** deployed in OpenShift AI (vLLM inference server)
-
-## Installation
-
-### Quick Install (via Makefile)
-
-```bash
-# From the helm/ directory
-# For vLLM servers without authentication
-make copilot-backend-install NAMESPACE=your-namespace \
-  copilot.llmApiKey=not-needed
-
-# For secured endpoints (OpenShift AI, etc.)
-make copilot-backend-install NAMESPACE=your-namespace \
-  copilot.llmBaseUrl=https://your-nemotron-endpoint/v1 \
-  copilot.llmModel=nvidia/nemotron-nano-9b-v2 \
-  copilot.llmApiKey=your-actual-api-key
-```
-
-**Security Note**:
-- The API key is **required** and must be passed at deployment time
-- **Never commit API keys to Git** - they're passed as Make parameters
-- For unsecured vLLM endpoints, use `copilot.llmApiKey=not-needed`
-- For production endpoints, use the actual API key from your LLM provider
-
-The Makefile will:
-1. Build custom Docker image via OpenShift BuildConfig (3-5 minutes first time)
-2. Deploy Helm chart with all resources
-3. Wait for deployment to be ready
-4. Print service URL and public route
-
-### Manual Install
-
-1. Build the image:
-   ```bash
-   oc apply -f imagestream.yaml -n your-namespace
-   oc apply -f buildconfig.yaml -n your-namespace
-   oc start-build copilot-backend --from-dir=../../. --follow -n your-namespace
-   ```
-
-2. Install the chart:
-   ```bash
-   helm upgrade --install copilot-backend . \
-     --namespace your-namespace \
-     --set image.repository=image-registry.openshift-image-registry.svc:5000/your-namespace/copilot-backend \
-     --set image.tag=latest \
-     --set llm.baseUrl=http://nemotron-service:8000/v1 \
-     --set llm.model=nvidia/nemotron-nano-9b-v2
-   ```
 
 ## Configuration
 
@@ -128,31 +75,34 @@ The deployment sets these environment variables automatically:
 
 ## API Endpoints
 
-### POST /query
+### POST /query/stream
 
-Process a user query through the LLM with MCP tool support.
+Process a user query through the LLM with real-time progress streaming via Server-Sent Events (SSE).
 
 **Request:**
 ```json
 {
   "query": "Show me the database schemas",
-  "conversation_id": "optional-conversation-id"
+  "conversation_id": "optional-conversation-id",
+  "enable_reasoning": true
 }
 ```
 
-**Response:**
-```json
-{
-  "response": "The database has 3 schemas: public, staging, and analytics...",
-  "tool_calls": [
-    {
-      "tool": "list_schemas",
-      "arguments": {},
-      "result": "..."
-    }
-  ],
-  "conversation_id": "optional-conversation-id"
-}
+**Response (SSE Stream):**
+Server sends multiple events as the query is processed:
+
+```
+data: {"type":"iteration_start","iteration":1,"max_iterations":100}
+
+data: {"type":"llm_thinking","content":"I need to list the schemas...","iteration":1}
+
+data: {"type":"tool_call","tool_name":"list_schemas","arguments":{},"iteration":1}
+
+data: {"type":"tool_result","tool_name":"list_schemas","result":"...","iteration":1}
+
+data: {"type":"final_response","content":"The database has 3 schemas...","tool_calls":[...]}
+
+data: {"type":"timing_summary","total_time":2.5,"llm_time":1.2,"mcp_time":0.8,...}
 ```
 
 ### GET /health
@@ -197,61 +147,68 @@ List available MCP tools.
 # Get the route URL
 COPILOT_URL=$(oc get route copilot-backend -o jsonpath='{.spec.host}' -n your-namespace)
 
-# Send a query
-curl -X POST "https://${COPILOT_URL}/query" \
+# Send a streaming query (SSE)
+curl -N -X POST "https://${COPILOT_URL}/query/stream" \
   -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
   -d '{
-    "query": "What are the most expensive queries in the database?"
+    "query": "What are the most expensive queries in the database?",
+    "enable_reasoning": true
   }'
 ```
 
 ### From Svelte Frontend
 
 ```javascript
-const response = await fetch('https://copilot-backend.example.com/query', {
+const response = await fetch('https://copilot-backend.example.com/query/stream', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'text/event-stream'
   },
   body: JSON.stringify({
     query: userInput,
-    conversation_id: sessionId
+    conversation_id: sessionId,
+    enable_reasoning: true
   })
 });
 
-const data = await response.json();
-console.log(data.response);  // LLM's final answer
-console.log(data.tool_calls);  // Tools that were executed
+// Read SSE stream
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+
+  const chunk = decoder.decode(value);
+  // Parse SSE events: "data: {...}\n\n"
+  const events = chunk.split('\n\n').filter(e => e.startsWith('data: '));
+  for (const event of events) {
+    const data = JSON.parse(event.slice(6)); // Remove "data: " prefix
+    console.log(data.type, data);
+  }
+}
 ```
 
 ## How It Works
 
-1. **User sends query** via POST /query
-2. **Backend forwards to LLM** with list of available MCP tools
-3. **LLM decides which tools to use** (or none if not needed)
-4. **Backend executes tools via MCP** and collects results
-5. **Results sent back to LLM** for processing
-6. **Steps 3-5 repeat** until LLM has final answer
-7. **Backend returns response** with answer and tool execution history
+1. **User sends query** via POST /query/stream (SSE)
+2. **Backend streams iteration_start event** to indicate processing has begun
+3. **Backend forwards to LLM** with list of available MCP tools
+4. **LLM streams thinking content** (if reasoning enabled) - backend forwards as llm_thinking events
+5. **LLM decides which tools to use** (or none if not needed)
+6. **Backend streams tool_call events** and executes tools via MCP
+7. **Backend streams tool_result events** with MCP results
+8. **Results sent back to LLM** for processing
+9. **Steps 4-8 repeat** until LLM has final answer
+10. **Backend streams final_response and timing_summary events**
 
-This implements an **agentic loop** where the LLM can make multiple tool calls to gather information before providing a final answer.
+This implements an **agentic loop** with **real-time progress updates** via Server-Sent Events, allowing the frontend to display thinking, tool execution, and results as they happen.
 
 ## Scaling
 
-The copilot backend is stateless and can be scaled horizontally:
-
-```bash
-# Manual scaling
-oc scale deployment/copilot-backend --replicas=3 -n your-namespace
-
-# Enable autoscaling
-helm upgrade copilot-backend . \
-  --namespace your-namespace \
-  --set autoscaling.enabled=true \
-  --set autoscaling.minReplicas=2 \
-  --set autoscaling.maxReplicas=5 \
-  --set autoscaling.targetCPUUtilizationPercentage=80
-```
+This component has not been testing for horizontal scaling. 
 
 ## Troubleshooting
 
@@ -270,10 +227,11 @@ curl "https://${COPILOT_URL}/health"
 ```bash
 oc port-forward service/copilot-backend 8080:8080 -n your-namespace
 
-# Test locally
-curl -X POST "http://localhost:8080/query" \
+# Test locally with SSE streaming
+curl -N -X POST "http://localhost:8080/query/stream" \
   -H "Content-Type: application/json" \
-  -d '{"query": "List database schemas"}'
+  -H "Accept: text/event-stream" \
+  -d '{"query": "List database schemas", "enable_reasoning": true}'
 ```
 
 ### Common Issues
@@ -296,9 +254,6 @@ curl -X POST "http://localhost:8080/query" \
 ```bash
 # Via Makefile
 make copilot-backend-uninstall NAMESPACE=your-namespace
-
-# Or manually
-helm uninstall copilot-backend -n your-namespace
 ```
 
 ## Development
@@ -331,11 +286,22 @@ helm uninstall copilot-backend -n your-namespace
 ```python
 import requests
 
+# Stream SSE events
 response = requests.post(
-    "http://localhost:8080/query",
-    json={"query": "Show me the database schemas"}
+    "http://localhost:8080/query/stream",
+    headers={"Accept": "text/event-stream"},
+    json={
+        "query": "Show me the database schemas",
+        "enable_reasoning": True
+    },
+    stream=True
 )
-print(response.json())
+
+# Parse SSE events
+for line in response.iter_lines():
+    if line and line.startswith(b'data: '):
+        event_data = line[6:].decode('utf-8')  # Remove "data: " prefix
+        print(event_data)
 ```
 
 ## Architecture Details

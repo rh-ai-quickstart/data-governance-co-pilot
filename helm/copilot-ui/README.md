@@ -12,7 +12,7 @@ This Helm chart deploys the Svelte UI as a static website served by nginx. The U
 User Browser
   ↓ HTTPS (OpenShift Route)
 nginx (serving static Svelte app)
-  ↓ POST /query (configured at build time)
+  ↓ POST /query/stream (SSE, configured at build time)
 copilot-backend service
 ```
 
@@ -35,40 +35,9 @@ The Makefile automatically:
 make copilot-ui-install NAMESPACE=your-namespace
 ```
 
-### Manual Installation
+### Installation
 
-1. **Get the backend URL**:
-   ```bash
-   BACKEND_URL=$(oc get route copilot-backend -o jsonpath='https://{.spec.host}' -n your-namespace)
-   echo "Backend URL: $BACKEND_URL"
-   ```
-
-2. **Build the image**:
-   ```bash
-   # Create ImageStream
-   oc apply -f imagestream.yaml -n your-namespace
-
-   # Update BuildConfig with backend URL
-   cat buildconfig.yaml | sed "s|\${BACKEND_URL}|$BACKEND_URL|g" | oc apply -f - -n your-namespace
-
-   # Start the build (uploads UI source files)
-   cd ../..  # Go to project root
-   oc start-build copilot-ui --from-dir=. --follow -n your-namespace
-   ```
-
-3. **Deploy the chart**:
-   ```bash
-   helm upgrade --install copilot-ui . \
-     --namespace your-namespace \
-     --set image.repository=image-registry.openshift-image-registry.svc:5000/your-namespace/copilot-ui \
-     --set image.tag=latest \
-     --set backend.url=$BACKEND_URL
-   ```
-
-4. **Get the UI URL**:
-   ```bash
-   echo "UI URL: https://$(oc get route copilot-ui -o jsonpath='{.spec.host}' -n your-namespace)"
-   ```
+See the helm chart root directory for installation directions and prerequisites.
 
 ## Configuration
 
@@ -109,18 +78,21 @@ The build happens in two stages:
 
 **Important**: The backend URL is baked into the UI at **build time**, not runtime. This means:
 
-✅ **Advantages**:
+**Advantages**:
 - No runtime configuration needed
 - Better security (no env vars exposed in browser)
 - Faster initial load (no config fetch)
 
-❌ **Limitation**:
+**Limitation**:
 - Changing the backend URL requires rebuilding the image
 
 If the backend route changes, you must rebuild:
 ```bash
 make copilot-ui-install NAMESPACE=your-namespace
 ```
+
+If making multiple changes during development to the copilot backend, it is simpler to rebuild the entire application to ensure
+the front-end UI can communicate with backend. See the installation instructions in the root helm directory.
 
 ## Deployment Details
 
@@ -156,25 +128,18 @@ Example questions:
 
 ## Scaling
 
-The UI can be scaled horizontally for high availability:
-
-```bash
-# Manual scaling
-oc scale deployment/copilot-ui --replicas=3 -n your-namespace
-
-# Via Helm
-helm upgrade copilot-ui . \
-  --namespace your-namespace \
-  --set replicaCount=3
-```
-
-Since the UI is stateless (static files served by nginx), any number of replicas can be run.
+This component has not been tested for horizontal scaling.
 
 ## Troubleshooting
 
+### General error on the first query
+
+There is a known cold-start issue with the first query to the Nemotron LLM model. After installation, if you a user query throws an exception,
+this may be due to a fresh deployment of the model. Try another query to see if this resolves the problem.
+
 ### UI shows "Failed to fetch" errors
 
-**Cause**: Backend URL is incorrect or backend is not reachable.
+**Cause**: The copilot backend URL is incorrect or backend is not reachable.
 
 **Fix**:
 1. Check what backend URL was baked in:
@@ -248,9 +213,6 @@ The deployment will automatically roll out the new image.
 ```bash
 # Via Makefile
 make copilot-ui-uninstall NAMESPACE=your-namespace
-
-# Or manually
-helm uninstall copilot-ui -n your-namespace
 ```
 
 This removes:

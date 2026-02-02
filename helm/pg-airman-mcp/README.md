@@ -15,45 +15,14 @@ ImportError: libpq.so.5: cannot open shared object file: No such file or directo
 
 This chart **automatically builds a fixed custom image** using OpenShift BuildConfig with the proper PostgreSQL client libraries included. The build happens automatically during installation via the Makefile.
 
-## Prerequisites
+## Installation and Prerequisites
+
+See the readme file in the root helm directory.
 
 - Kubernetes cluster (OpenShift supported)
 - PostgreSQL database (e.g., deployed via the `pgvector` chart)
 - Helm 3.x
 - **OpenShift**: BuildConfig support (for custom image build)
-
-## Installation
-
-### Basic Installation
-
-```bash
-helm install pg-airman-mcp ./helm/pg-airman-mcp \
-  --set postgres.user=youruser \
-  --set postgres.password=yourpassword \
-  --set postgres.database=yourdatabase
-```
-
-### Using with pgvector Chart
-
-```bash
-# Install with connection to pgvector StatefulSet
-helm install pg-airman-mcp ./helm/pg-airman-mcp \
-  --set postgres.host=pgvector-0.pgvector-postgres-service \
-  --set postgres.user=airman \
-  --set postgres.password=secretpassword \
-  --set postgres.database=airmandb
-```
-
-### Production Configuration
-
-```bash
-helm install pg-airman-mcp ./helm/pg-airman-mcp \
-  --set mcp.accessMode=restricted \
-  --set mcp.transport=sse \
-  --set postgres.user=airman \
-  --set postgres.password=secretpassword \
-  --set postgres.database=airmandb
-```
 
 ## Configuration
 
@@ -71,12 +40,16 @@ helm install pg-airman-mcp ./helm/pg-airman-mcp \
 | `mcp.port` | Port for SSE/HTTP transport | `8000` |
 | `replicas` | Number of replicas | `1` |
 
+**Important:** Use mcp.transport 'streamable-http' only. The other options are not supported by this quickstart.
+
 ### Access Modes
 
 - **`restricted`** (recommended for production): Read-only operations, query timeout limits
 - **`unrestricted`** (development only): Full read/write access
 
 ### Transport Options
+
+**Important:** Use mcp.transport 'streamable-http' only. The other options are not supported by this quickstart.
 
 - **`streamable-http`** (default): Simple HTTP request-response, works through proxies/load balancers
 - **`sse`**: Server-Sent Events over HTTP (long-lived connections, streaming responses)
@@ -117,6 +90,8 @@ async def connect_to_airman():
 
 ### As a Sidecar in Another Pod
 
+This quickstart deploys the MCP server in its own pod, but other options, like sidecar deployments with the copilot backend may be possible with additional changes.
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -147,15 +122,11 @@ spec:
 
 For enhanced functionality, install these extensions in your PostgreSQL database:
 
+**Important:** These extensions are not enabled for this quickstart.
+
 ```sql
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;  -- Query performance analysis
 CREATE EXTENSION IF NOT EXISTS hypopg;              -- Hypothetical index testing
-```
-
-## Uninstallation
-
-```bash
-helm uninstall pg-airman-mcp
 ```
 
 ## Troubleshooting
@@ -163,20 +134,20 @@ helm uninstall pg-airman-mcp
 ### Check Pod Status
 
 ```bash
-kubectl get pods -l app.kubernetes.io/name=pg-airman-mcp
+oc get pods -l app.kubernetes.io/name=pg-airman-mcp
 ```
 
 ### View Logs
 
 ```bash
-kubectl logs -l app.kubernetes.io/name=pg-airman-mcp -f
+oc logs -l app.kubernetes.io/name=pg-airman-mcp -f
 ```
 
 ### Test Connection
 
 ```bash
 # Port forward the service
-kubectl port-forward svc/pg-airman-mcp-service 8000:8000
+oc port-forward svc/pg-airman-mcp-service 8000:8000
 
 # Test health endpoint (if using SSE transport)
 curl http://localhost:8000/health
@@ -185,7 +156,7 @@ curl http://localhost:8000/health
 ## Security Considerations
 
 - Use `restricted` access mode in production
-- Store database credentials in Kubernetes secrets (handled automatically by this chart)
+- Store database credentials in OpenShift/Kubernetes secrets (handled automatically by this chart)
 - Consider network policies to restrict which pods can access the MCP server
 - Use TLS for external connections (configure via ingress/route)
 

@@ -5,7 +5,7 @@ This Helm chart deploys the NVIDIA Nemotron Nano 9B v2 language model using KSer
 ## Features
 
 - **Automatic model deployment** using KServe InferenceService
-- **OCI container image** default storage (no S3 configuration required)
+- **OCI container image** Model car option (no S3 configuration required)
 - **vLLM runtime** for efficient LLM serving
 - **OAuth authentication** via oauth-proxy sidecar
 - **Extended timeouts** for long-running inference requests (10 minutes)
@@ -17,11 +17,11 @@ This Helm chart deploys the NVIDIA Nemotron Nano 9B v2 language model using KSer
 - OpenShift 4.17+ cluster
 - Red Hat OpenShift AI operator installed
 - NVIDIA GPU operator installed (for GPU nodes)
-- No additional storage configuration required (uses OCI container image by default)
+- No additional storage configuration required (uses remote URL (e.g., Huggingface) model source by default)
 
 ## Model Storage
 
-The model is deployed using an OCI container image by default. No additional storage configuration is required.
+The model is deployed using a custom URI by default. No additional storage configuration is required.
 
 ### Option 1: OCI Container Image (Default - Recommended)
 ```yaml
@@ -30,9 +30,6 @@ model:
     type: uri
     uri: "oci://quay.io/eformat/nvidia-nemotron-nano-9b-v2"
 ```
-
-**This is the default configuration - no changes needed!**
-
 ### Option 2: S3 Storage
 ```yaml
 model:
@@ -54,42 +51,18 @@ model:
 model:
   storage:
     type: uri
-    uri: "https://your-model-server.com/model"
+    uri: "hf://nvidia/NVIDIA-Nemotron-Nano-9B-v2"
 ```
+
+**This is the default configuration - no changes needed, but if your endpoint requires authentication or license approval registration, this may not work.**
 
 ## Installation
 
-### Manual Installation
-
-```bash
-# Install with default OCI container image (recommended)
-helm install nemotron-model ./nemotron-model \
-  --namespace my-namespace
-
-# Or install with custom S3 storage
-helm install nemotron-model ./nemotron-model \
-  --namespace my-namespace \
-  --set model.storage.type=s3 \
-  --set model.storage.s3Bucket=s3://my-bucket/NVIDIA-Nemotron-Nano-9B-v2
-```
-
-### Makefile Installation
+See the readme file in the root helm directory for details.
 
 ```bash
 # Standalone model deployment (uses OCI image by default)
 make nemotron-model-install NAMESPACE=my-namespace
-
-# Or as part of full stack deployment
-make install \
-  NAMESPACE=my-namespace \
-  DEPLOY_MODEL=true \
-  postgres.userId=postgres \
-  postgres.password=password \
-  postgres.databaseName=mydb \
-  minio.userId=minio \
-  minio.password=minio123 \
-  pgadmin.email=admin@example.com \
-  pgadmin.password=admin123
 ```
 
 ## Configuration
@@ -137,7 +110,7 @@ oc get route nvidia-nemotron-nano-9b-v2 -n my-namespace -o jsonpath='{.spec.host
 
 ```bash
 # Get the service account token
-oc sa get-token default -n my-namespace
+oc sa get-token default -n my-namespace #The default token has been deprecated; this command may not work with future versions of OpenShift
 ```
 
 ### Test the Model
@@ -188,15 +161,6 @@ oc logs $POD -c storage-initializer -n my-namespace
 
 ## Troubleshooting
 
-### Model Download Taking Too Long
-
-The initial deployment pulls the model from the OCI container registry. The ~18GB model typically loads in 3-5 minutes using the default OCI image. If using S3 storage, downloads may take 5-10 minutes depending on network speed. Monitor progress:
-
-```bash
-POD=$(oc get pods -l serving.kserve.io/inferenceservice=nvidia-nemotron-nano-9b-v2 -n my-namespace -o jsonpath='{.items[0].metadata.name}')
-oc logs $POD -c storage-initializer -n my-namespace -f
-```
-
 ### Inference Requests Timing Out
 
 If you see 502 errors or timeouts during long-running inference:
@@ -226,29 +190,21 @@ oc get pods -n nvidia-gpu-operator
 ```bash
 # Using Makefile
 make nemotron-model-uninstall NAMESPACE=my-namespace
-
-# Or using Helm directly
-helm uninstall nemotron-model -n my-namespace
 ```
 
 ## Integration with Copilot Backend
 
 This chart is designed to integrate seamlessly with the copilot-backend service:
 
-```bash
-# Deploy model and configure backend automatically (uses OCI image by default)
-make copilot-backend-install \
-  NAMESPACE=my-namespace \
-  DEPLOY_MODEL=true
-```
-
 The Makefile will:
-1. Deploy the model using this chart with the default OCI container image
+1. Deploy the model using this chart 
 2. Wait for the model to be ready
 3. Extract the model name from the deployed InferenceService
 4. Extract the model endpoint URL from the OpenShift route
 5. Extract the API key from the namespace's default service account token
 6. Configure copilot-backend with all extracted values automatically
+
+Hence, any modifications to the endpoint URL, model name or api token for the model will require redeploying the application. See the readme file in the root helm directory.
 
 **Note**:
 - When `DEPLOY_MODEL=true`, you don't need to specify `copilot.llmBaseUrl`, `copilot.llmModel`, or `copilot.llmApiKey` - they are all automatically extracted

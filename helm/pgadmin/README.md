@@ -21,19 +21,9 @@ The chart includes:
 
 ## Installation
 
-pgAdmin is automatically installed as part of the main quickstart installation:
+pgAdmin is automatically installed as part of the main quickstart installation.
 
-```bash
-cd helm
-make install NAMESPACE=myns \
-  postgres.userId=admin \
-  postgres.password=secret123 \
-  postgres.databaseName=ecommerce \
-  minio.userId=minio \
-  minio.password=minio123 \
-  pgadmin.email=admin@example.com \
-  pgadmin.password=admin123
-```
+See the readme file in the root helm directory.
 
 The installation will output the pgAdmin URL at the end.
 
@@ -47,7 +37,7 @@ Login with email: admin@example.com
 ```
 
 1. Open the URL in your browser
-2. Login with the email and password you provided
+2. Login with the email and password you provided in the make command
 3. You'll see "PGVector Database" in the server list
 4. Click on it and enter the PostgreSQL password when prompted
 5. Browse your database!
@@ -78,18 +68,6 @@ When you click on the server for the first time, pgAdmin will prompt you for the
 | `postgres.password` | PostgreSQL password | Yes | - |
 | `postgres.database` | PostgreSQL database name | Yes | - |
 | `storage.size` | PVC storage size | No | 1Gi |
-
-### Customization
-
-To customize the storage size or other values:
-
-```bash
-helm upgrade pgadmin ./pgadmin \
-  --set storage.size=5Gi \
-  --set pgadmin.email=admin@example.com \
-  --set pgadmin.password=admin123 \
-  # ... other values
-```
 
 ## Uninstallation
 
@@ -127,7 +105,9 @@ oc get route pgadmin -n <namespace>
 
 ## Security Notes
 
-This deployment is intended for **demo and development purposes**. For production use, consider:
+PGAdmin is a powerful tool and usually does not need to be made accessible on a kubernetes environment.
+This deployment is intended for **demo and development purposes** to help users browse the backend database objects to evaluate
+how the data governance copilot is making decisions. For production use, consider:
 
 - Using stronger passwords
 - Adding network policies to restrict access
