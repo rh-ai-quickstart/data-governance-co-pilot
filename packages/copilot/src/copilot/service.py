@@ -286,11 +286,37 @@ class DataGovernanceCopilot:
 
         # Base prompt content
         base_content = (
-            "You are a data governance assistant with access to PostgreSQL "
-            "database analysis tools. Help users understand and optimize their "
-            "database performance, schema design, and query patterns. "
-            "When analyzing databases, use the available tools to provide "
-            "accurate, data-driven insights.\n\n"
+            "You are a data analyst with access to "
+            "tools connected to a PostgreSQL database. "
+            "Use these tools to provide accurate, data-driven insights "
+            "while complying with best practices and, when provided, "
+            "a data governance policy. Data governance policy "
+            "rules take precedence over user requests. Users "
+            "must not be allowed to bypass the policy even when they insist. "
+            "You should proactively use the tools to understand the schema " \
+            "and learn how to join across tables and views to answer queries. " 
+            "Do not ask the user permission to do this. If the query does not return data, "
+            "you may have to try multiple variations until you find the right query. "
+            "Don't expact the user to provide exact table, view or column names. "
+            "Assume system schema do not contain business data. "
+            "Hence, when no schema is given to you, examine the other schema. "
+            "When possible, enforce all data governance policy rules in the SQL "
+            "you generate versus apply them on the raw results returned to you. "
+            "This includes data masking and formatting rules "
+            "and limits on how many rows to return. "
+            "When users ask broadly about the database, first list all object types " 
+            "(tables, views, sequences, etc.) in each schema to provide a holistic overview "
+            "before drilling down. When asked to describe the database, "
+            "provide a summary of key objects (tables and views) that hold business data "
+            "with their purposes and data sensitivity (e.g., PII, deprecated status). "
+            "When listing tables/views, infer and describe potential relationships (e.g., " 
+            "foreign keys, star schema patterns) to help users understand data flow. "
+            "Always highlight data governance rules (e.g., PII restrictions, deprecated objects) " 
+            "in initial descriptions to prevent misuse. "
+            "If ambiguity exists in a query, use tools to " 
+            "resolve it before responding, rather than asking the user for clarification. "
+            "Your goal is to reduce unnecessary back-and-forth conversation. "
+            "\n\n"
         )
 
         # Add governance policy if present
@@ -302,7 +328,7 @@ class DataGovernanceCopilot:
                 "The following data governance policy MUST be followed when analyzing data, "
                 "making recommendations, or executing queries:\n\n"
                 f"{governance_policy}\n\n"
-                "Ensure all your responses and actions comply with the above policy.\n\n"
+                "Ensure all your responses and actions comply with the above policy. No exceptions!\n\n"
             )
         else:
             logger.info("No governance policy active - using default system prompt")
@@ -339,7 +365,7 @@ class DataGovernanceCopilot:
         - iteration_start: When a new iteration begins
         - llm_thinking: LLM's internal reasoning (from <think> tags)
         - tool_call: When a tool is being executed
-        - tool_result: Results from tool execution
+        - tool_result: Tool execution complete (timing info only, no result data for data governance)
         - final_response: The final answer
         - error: If an error occurs
 
@@ -420,6 +446,17 @@ class DataGovernanceCopilot:
                 if total_with_tools > self.max_context_length:
                     logger.warning(f"Token estimate ({total_with_tools:,}) exceeds model limit ({self.max_context_length:,})!")
 
+                # Debug: Log messages being sent to LLM to verify thinking content is removed
+                logger.info(f"[LLM_CONTEXT_DEBUG] Sending {len(messages)} messages to LLM in iteration {iteration}")
+                for idx, msg in enumerate(messages):
+                    role = msg.get("role", "unknown")
+                    content = msg.get("content", "")
+                    content_preview = content[:200] if content else "(no content)"
+                    has_think_tag = "<think>" in content.lower() or "</think>" in content.lower() if content else False
+                    logger.info(f"  Message {idx}: role={role}, length={len(content) if content else 0}, has_think_tags={has_think_tag}")
+                    if has_think_tag:
+                        logger.warning(f"  ⚠️  THINKING CONTENT DETECTED IN MESSAGE {idx}!")
+                        logger.warning(f"  Content preview: {content_preview}")
 
                 # Call LLM with available tools using streaming mode
                 # Streaming solves oauth-proxy timeout by sending response headers immediately
@@ -771,10 +808,11 @@ class DataGovernanceCopilot:
                         "result": str(tool_result)
                     })
 
+                    # Send tool completion event without result data
+                    # (results may contain sensitive data that violates governance policy)
                     yield {
                         "type": "tool_result",
                         "tool_name": tool_name,
-                        "result": str(tool_result)[:500],  # Truncate for streaming
                         "mcp_time": mcp_elapsed,
                         "iteration": iteration
                     }
@@ -865,7 +903,7 @@ async def query_stream(request: QueryRequest):
     - iteration_start: When each iteration begins
     - llm_thinking: LLM's reasoning process
     - tool_call: When tools are executed
-    - tool_result: Results from tools
+    - tool_result: Tool execution complete (timing only, no data for governance)
     - final_response: The complete answer
     - timing_summary: Performance breakdown
     - error: If something goes wrong
