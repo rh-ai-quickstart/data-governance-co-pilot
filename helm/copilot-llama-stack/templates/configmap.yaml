@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.distribution.name }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "copilot-llama-stack.labels" . | nindent 4 }}
+data:
+  run.yaml: |
+    version: '1'
+    image_name: {{ .Values.distribution.imageName | quote }}
+    apis:
+{{- range .Values.config.apis }}
+      - {{ . }}
+{{- end }}
+    providers:
+      # 1. INFERENCE (Remote VLLM)
+      inference:
+        - provider_id: vllm-inference
+          provider_type: remote::vllm
+          config:
+            url: ${env.VLLM_URL}
+            api_token: ${env.VLLM_API_TOKEN}
+            model: ${env.INFERENCE_MODEL}
+
+      # 2. AGENTS (Logic runs inline, uses Inference provider for tokens)
+      agents:
+        - provider_id: meta-agents
+          provider_type: inline::meta-reference
+          config:
+            inference_model: ${env.INFERENCE_MODEL}
+            persistence:
+              agent_state:
+                backend: local-kv-store
+                namespace: default
+                table_name: agent_state
+              responses:
+                backend: local-sql-store
+                namespace: default
+                table_name: responses
+
+      # 3. SAFETY (Inline safety checks)
+      safety:
+        - provider_id: llama-guard
+          provider_type: inline::llama-guard
+          config: {}
+
+      # 4. VECTOR I/O (Inline vector operations)
+      vector_io:
+        - provider_id: faiss
+          provider_type: inline::faiss
+          config:
+            persistence:
+              backend: local-kv-store
+              namespace: default
+
+      # 5. TOOLS (Remote MCP)
+      tool_runtime:
+        - provider_id: mcp-tools
+          provider_type: remote::model-context-protocol
+          config:
+            mcp_endpoint:
+              uri: {{ include "copilot-llama-stack.mcpEndpoint" . }}
+
+    # STORAGE (Required by Llama Stack 0.3.x)
+    storage:
+      backends:
+        local-kv-store:
+          type: {{ .Values.config.storage.kvBackend.type }}
+          db_path: {{ include "copilot-llama-stack.kvDbPath" . }}
+        local-sql-store:
+          type: {{ .Values.config.storage.sqlBackend.type }}
+          db_path: {{ include "copilot-llama-stack.sqlDbPath" . }}
+      stores:
+        metadata:
+          backend: local-kv-store
+          namespace: default
+        conversations:
+          backend: local-sql-store
+          namespace: default
+          table_name: conversations
+        inference:
+          backend: local-sql-store
+          namespace: default
+          table_name: inference
+      kv_store_provider_id: local-kv-store

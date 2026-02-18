@@ -20,10 +20,16 @@ NEMOTRON_MODEL_CHART := nemotron-model
 COPILOT_BACKEND_CHART := copilot-backend
 # copilot-ui chart for Svelte frontend
 COPILOT_UI_CHART := copilot-ui
+# copilot-llama-stack chart for Llama Stack distribution
+COPILOT_LLAMA_STACK_CHART := copilot-llama-stack
 
 # Flag to control whether to deploy the LLM model (default: false)
 # Set to true to automatically deploy NVIDIA Nemotron model
 DEPLOY_MODEL ?= false
+
+# Provider mode for copilot backend (default: mcp_direct)
+# Options: mcp_direct, llama_stack
+PROVIDER_MODE ?= mcp_direct
 
 MINIMUM_OC_VERSION = "4.17.0"
 MINIMUM_USERID_LENGTH = 3
@@ -61,6 +67,9 @@ help:
 	@echo "  NAMESPACE                - Target namespace (required)"
 	@echo "  DEPLOY_MODEL             - Set to 'true' to auto-deploy and configure LLM model (default: false)"
 	@echo "                             Uses OCI image by default, model name/endpoint/API key auto-extracted"
+	@echo "  PROVIDER_MODE            - LLM provider mode: mcp_direct or llama_stack (default: mcp_direct)"
+	@echo "                             mcp_direct: Backend connects directly to vLLM"
+	@echo "                             llama_stack: Backend uses Llama Stack for LLM inference"
 	@echo "  model.storage.s3Bucket   - S3 bucket path (optional, overrides default OCI image)"
 	@echo "  model.storage.uri        - Custom OCI/URI path (optional, overrides default OCI image)"
 	@echo "  postgres.userId          - PostgreSQL user ID (required)"
@@ -164,6 +173,10 @@ endif
 		$(if $(copilot.llmBaseUrl),copilot.llmBaseUrl=$(copilot.llmBaseUrl),) \
 		$(if $(copilot.llmModel),copilot.llmModel=$(copilot.llmModel),) \
 		$(if $(copilot.llmApiKey),copilot.llmApiKey=$(copilot.llmApiKey),)
+	@$(MAKE) copilot-llama-stack-install NAMESPACE=$(NAMESPACE) PROVIDER_MODE=$(PROVIDER_MODE) DEPLOY_MODEL=$(DEPLOY_MODEL) \
+		$(if $(copilot.llmModel),copilot.llmModel=$(copilot.llmModel),) \
+		$(if $(copilot.llmBaseUrl),copilot.llmBaseUrl=$(copilot.llmBaseUrl),) \
+		$(if $(copilot.llmApiKey),copilot.llmApiKey=$(copilot.llmApiKey),)
 	@$(MAKE) copilot-ui-install NAMESPACE=$(NAMESPACE)
 
 .PHONY: minio-install
@@ -243,6 +256,27 @@ build-pg-airman-mcp-image:
 .PHONY: pg-airman-mcp-install
 pg-airman-mcp-install: check-postgres-credentials build-pg-airman-mcp-image
 	@echo "Installing pg-airman-mcp helm chart..."
+ifeq ($(PROVIDER_MODE),llama_stack)
+	@echo "PROVIDER_MODE=llama_stack: Using SSE transport for Llama Stack compatibility"
+	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
+		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/pg-airman-mcp \
+		--set image.tag=latest \
+		--set image.pullPolicy=Always \
+		--set postgres.host=pgvector-0.pgvector-postgres-service \
+		--set postgres.port=5432 \
+		--set postgres.user=$(postgres.userId) \
+		--set postgres.password=$(postgres.password) \
+		--set postgres.database=$(postgres.databaseName) \
+		--set mcp.transport=sse \
+		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
+		--timeout 5m
+	@echo "Waiting for pg-airman-mcp to be ready..."
+	@oc rollout status deployment/pg-airman-mcp -n $(NAMESPACE) --timeout=300s
+	@echo "pg-airman-mcp installation complete."
+	@echo "Service URL (internal): http://pg-airman-mcp-service:8000"
+	@echo "Transport: sse (for Llama Stack), access mode: $(if $(pgairman.accessMode),$(pgairman.accessMode),restricted)"
+else
+	@echo "Using streamable-http transport (default)"
 	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
 		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/pg-airman-mcp \
 		--set image.tag=latest \
@@ -259,9 +293,10 @@ pg-airman-mcp-install: check-postgres-credentials build-pg-airman-mcp-image
 	@echo "pg-airman-mcp installation complete."
 	@echo "Service URL (internal): http://pg-airman-mcp-service:8000"
 	@echo "Transport: streamable-http (default), access mode: $(if $(pgairman.accessMode),$(pgairman.accessMode),restricted)"
+endif
 
 .PHONY: uninstall
-uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall nemotron-model-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
+uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall nemotron-model-uninstall copilot-llama-stack-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
 
 .PHONY: minio-uninstall
 minio-uninstall:
@@ -391,6 +426,55 @@ endif
 copilot-backend-uninstall:
 	@echo "Uninstalling copilot-backend helm chart"
 	@helm -n $(NAMESPACE) uninstall copilot-backend || true
+
+# Install Llama Stack distribution (conditional on PROVIDER_MODE)
+.PHONY: copilot-llama-stack-install
+copilot-llama-stack-install:
+ifeq ($(PROVIDER_MODE),llama_stack)
+ifeq ($(DEPLOY_MODEL),true)
+	@echo "PROVIDER_MODE=llama_stack with DEPLOY_MODEL=true: Extracting model configuration..."
+	@$(MAKE) nemotron-model-wait NAMESPACE=$(NAMESPACE)
+	@MODEL_NAME=$$(oc get inferenceservice -n $(NAMESPACE) -l release=nemotron-model -o jsonpath='{.items[0].metadata.name}'); \
+	MODEL_URL="https://$$(oc get route $$MODEL_NAME -o jsonpath='{.spec.host}' -n $(NAMESPACE))/v1"; \
+	MODEL_API_KEY=$$(oc get secret default-name-$$MODEL_NAME-sa -n $(NAMESPACE) -o jsonpath='{.data.token}' | base64 -d); \
+	echo "Installing Llama Stack with model: $$MODEL_NAME"; \
+	echo "Model endpoint: $$MODEL_URL"; \
+	helm -n $(NAMESPACE) upgrade --install copilot-llama-stack $(COPILOT_LLAMA_STACK_CHART) \
+		--set distribution.name=copilot-llama-stack \
+		--set model.name=$$MODEL_NAME \
+		--set model.url=$$MODEL_URL \
+		--set model.apiKey=$$MODEL_API_KEY \
+		--timeout 10m
+else
+	@echo "Installing Llama Stack with configured model endpoint..."
+	@helm -n $(NAMESPACE) upgrade --install copilot-llama-stack $(COPILOT_LLAMA_STACK_CHART) \
+		--set distribution.name=copilot-llama-stack \
+		$(if $(copilot.llmModel),--set model.name=$(copilot.llmModel),) \
+		$(if $(copilot.llmBaseUrl),--set model.url=$(copilot.llmBaseUrl),) \
+		$(if $(copilot.llmApiKey),--set model.apiKey=$(copilot.llmApiKey),) \
+		--timeout 10m
+endif
+	@echo "Waiting for Llama Stack to be ready..."
+	@sleep 10
+	@oc wait --for=jsonpath='{.status.conditions[?(@.type=="DeploymentReady")].status}=True' \
+		llamastackdistribution/copilot-llama-stack -n $(NAMESPACE) --timeout=600s || \
+		(echo "Llama Stack deployment failed. Check logs with: oc logs -l app.kubernetes.io/name=copilot-llama-stack -n $(NAMESPACE)" && exit 1)
+	@echo "Llama Stack installation complete."
+	@echo "Service URL (internal): http://copilot-llama-stack-service:8321"
+	@echo "Public route: https://$$(oc get route llama-stack-api -o jsonpath='{.spec.host}' -n $(NAMESPACE))"
+else
+	@echo "Skipping Llama Stack installation (PROVIDER_MODE=$(PROVIDER_MODE))"
+endif
+
+# Uninstall Llama Stack distribution
+.PHONY: copilot-llama-stack-uninstall
+copilot-llama-stack-uninstall:
+	@echo "Uninstalling Llama Stack helm chart"
+	@-helm -n $(NAMESPACE) uninstall copilot-llama-stack 2>/dev/null || echo "Llama Stack chart not installed"
+	@echo "Cleaning up Llama Stack PVCs (if any)..."
+	@-oc get pvc -n $(NAMESPACE) -o json | \
+		jq -r '.items[] | select(.metadata.ownerReferences[]?.name | contains("copilot-llama-stack")) | .metadata.name' | \
+		xargs -I {} oc delete pvc {} -n $(NAMESPACE) 2>/dev/null || echo "No Llama Stack PVCs found"
 
 # Build copilot-ui custom image
 .PHONY: build-copilot-ui-image
