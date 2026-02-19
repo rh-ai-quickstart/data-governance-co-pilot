@@ -1,6 +1,6 @@
 # Data Governance Co-Pilot
 
-Empower data analyst using AI-driven natural language queries integrated with their organization's data governance policy.
+Empower data analysts using AI-driven natural language queries integrated with their organization's data governance policy.
 
 ## Description
 
@@ -8,7 +8,7 @@ The Data Governance Co-Pilot enables analysts to interact with their databases u
 
 This quickstart demonstrates how to build an agentic AI application that combines Large Language Model (LLM) inference with database tools through the Model Context Protocol (MCP). The application supports two deployment architectures:
 
-- **MCP-Direct Mode**: Backend manages the agentic loop with direct vLLM inference and MCP tool execution
+- **Custom MCP Client Mode**: Backend manages the agentic loop with direct vLLM inference and MCP tool execution
 - **Llama Stack Mode**: Leverages OpenShift AI's Llama Stack operator for agent orchestration with integrated MCP tools
 
 Both modes provide the same user experience through a modern web interface with real-time streaming, reasoning transparency, and conversation management. The flexible architecture allows organizations to choose the deployment mode that best fits their infrastructure and operational requirements.
@@ -53,7 +53,7 @@ The Data Governance Co-Pilot consists of three main components:
 │  └────────────┬─────────────┬───────────────────────────┘   │
 │               │             │                               │
 │   ┌───────────▼──────┐  ┌──▼─────────────────┐              │
-│   │ MCP-Direct       │  │ Llama Stack        │              │
+│   │ Custom MCP Client       │  │ Llama Stack │              │
 │   │ Provider         │  │ Provider           │              │
 │   │                  │  │                    │              │
 │   │ • OpenAI Client  │  │ • Llama Stack      │              │
@@ -95,7 +95,7 @@ The Data Governance Co-Pilot consists of three main components:
 
 ### Architecture Modes
 
-#### MCP-Direct Mode
+#### Custom MCP Client Mode
 
 In this mode, the FastAPI backend manages the complete agentic loop:
 
@@ -120,14 +120,14 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
 5. Llama Stack executes the agentic loop (tool calling, iteration)
 6. Backend streams and maps Llama Stack events to UI format
 
-**Best for**: Organizations leveraging OpenShift AI infrastructure, preferring managed agent orchestration, or using standard OpenAI-compatible models. Note that Llama Stack supports both turn- and step-based inference. In this quickstart, we use it's ability to implement fire-and-forget, turn-based inference.
+**Best for**: Organizations leveraging OpenShift AI infrastructure, preferring managed agent orchestration, or using standard OpenAI-compatible models. Note that Llama Stack supports both turn- and step-based inference. In this quickstart, we use it's ability to implement fire-and-forget, turn-based inference. Note that RHOAI llama stack is a preview technology and will likely change in future versions of RHOAI.
 
 ### Technology Stack
 
 - **Frontend**: Svelte 5, TypeScript, TailwindCSS, Server-Sent Events (SSE)
 - **Backend**: Python 3.12, FastAPI, OpenAI Python SDK, MCP SDK
 - **LLM Inference**:
-  - MCP-Direct: vLLM (supports Nemotron, Llama 3.1)
+  - Custom MCP Client: vLLM (supports Nemotron, Llama 3.1)
   - Llama Stack: OpenShift AI Llama Stack Operator
 - **Tool Runtime**: Model Context Protocol (MCP) server for PostgreSQL (pg-airman-mcp)
 - **Database**: PostgreSQL (EDB Postgres AI database)
@@ -189,7 +189,7 @@ You can also deploy the quickstart using an existing model. Specify DEPLOY_MODEL
 
 The application supports two deployment modes. Choose the one that fits your infrastructure:
 
-#### Option 1: MCP-Direct Mode (Default)
+#### Option 1: Custom MCP Client Mode (Default)
 
 This mode deploys a vLLM model instance and manages the agentic loop in the backend.
 
@@ -260,7 +260,7 @@ This automatically deploys:
    - `copilot-ui-*` - Web interface
    - `copilot-backend-*` - FastAPI backend
    - `pg-airman-mcp-*` - MCP server
-   - `copilot-llama-stack-*` (Llama Stack mode) or `nvidia-nemotron-*` (MCP-Direct mode)
+   - `copilot-llama-stack-*` (Llama Stack mode) or `nvidia-nemotron-*` (Custom MCP Client mode)
 
 2. **Access the UI**:
    ```bash
@@ -282,7 +282,7 @@ The Makefile supports several configuration parameters:
 # Provider mode
 PROVIDER_MODE=mcp_direct        # or llama_stack
 
-# Model deployment (MCP-Direct mode only)
+# Model deployment (Custom MCP Client mode only)
 DEPLOY_MODEL=true               # Deploy Nemotron model
 llm.model=<model-name>          # Model identifier
 llm.baseUrl=<vllm-url>          # External vLLM endpoint
@@ -297,7 +297,7 @@ postgres.host=<hostname>
 postgres.port=5432
 postgres.database=<db-name>
 
-# Tool call format (MCP-Direct mode, optional)
+# Tool call format (Custom MCP Client mode, optional)
 llm.toolCallFormat=auto         # auto, nemotron, or openai
 ```
 
@@ -305,9 +305,10 @@ llm.toolCallFormat=auto         # auto, nemotron, or openai
 
 **GPU Scheduling Issues**:
 If pods fail to schedule due to GPU taints, verify the tolerations in `helm/nemotron-model/templates/inferenceservice.yaml`.
+These tolerations may be labeled differently across clusters.
 
 **MCP Connection Errors**:
-- MCP-Direct mode: Check that `pg-airman-mcp` service uses streamable-http transport
+- Custom MCP Client mode: Check that `pg-airman-mcp` service uses streamable-http transport
 - Llama Stack mode: Check that `pg-airman-mcp` service uses SSE transport (`/sse` endpoint)
 
 **Tool Calling Failures (Llama Stack mode)**:
@@ -368,21 +369,16 @@ CRITICAL: This will delete everything in the namespace and remove the namespace:
 - [Llama Stack Documentation](https://llama-stack.readthedocs.io)
 - [vLLM Documentation](https://docs.vllm.ai)
 
-### Architecture Details
-
-For detailed implementation plans and architecture decisions, see:
-- [Implementation Plan](/.claude/plans/fluttering-coalescing-falcon.md) - Dual-mode provider architecture
-- [Testing Notebook](/notebooks/test_llama_stack.ipynb) - Llama Stack validation
-
 ### Model Requirements
 
-**MCP-Direct Mode**:
+**Custom MCP client Mode**:
 - Nemotron models: Custom `<TOOLCALL>` tag format (auto-detected)
 - Llama 3.1 models: Standard OpenAI function calling (requires vLLM flags)
 
 **Llama Stack Mode**:
-- Requires models with standard OpenAI function calling support
-- vLLM must be deployed with: `--enable-auto-tool-choice --tool-call-parser llama3_json` (automatically set by this deployment)
+- Requires models with standard OpenAI function calling support (Nemotron is not supported)
+- vLLM must be deployed with: `--enable-auto-tool-choice --tool-call-parser=llama3_json` (automatically set by this deployment)
+- You should also specify a --max-model-len=32768
 - Nemotron custom format is NOT compatible with Llama Stack agents
 
 ### Contributing
