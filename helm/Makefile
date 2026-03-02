@@ -16,6 +16,8 @@ PGADMIN_CHART := pgadmin
 PG_AIRMAN_MCP_CHART := pg-airman-mcp
 # nemotron-model chart for NVIDIA Nemotron LLM deployment
 NEMOTRON_MODEL_CHART := nemotron-model
+# qwen3-model chart for Qwen3-14B LLM deployment
+QWEN3_MODEL_CHART := qwen3-model
 # copilot-backend chart for FastAPI backend service
 COPILOT_BACKEND_CHART := copilot-backend
 # copilot-ui chart for Svelte frontend
@@ -24,8 +26,30 @@ COPILOT_UI_CHART := copilot-ui
 COPILOT_LLAMA_STACK_CHART := copilot-llama-stack
 
 # Flag to control whether to deploy the LLM model (default: false)
-# Set to true to automatically deploy NVIDIA Nemotron model
+# Set to true to automatically deploy LLM model
 DEPLOY_MODEL ?= false
+
+# Flag to control whether to deploy MinIO (default: false)
+DEPLOY_MINIO ?= false
+
+# Flag to control whether to deploy pgAdmin (default: false)
+DEPLOY_PGADMIN ?= false
+
+# Llama Stack configuration (can be overridden)
+LLAMA_STACK_DISTRIBUTION_NAME ?= copilot-llama-stack
+LLAMA_STACK_SERVICE_PORT ?= 8321
+
+# Model to deploy (default: qwen3)
+# Options: nemotron, qwen3
+MODEL ?= qwen3
+
+# Model options:
+# - nemotron: NVIDIA Nemotron Nano 9B v2 (MCP-Direct mode only, custom tool calling)
+#   * DEPLOY_MODEL=true: Deploy to cluster via KServe
+#   * DEPLOY_MODEL=false: Use external endpoint (copilot.llmBaseUrl, copilot.llmModel, copilot.llmApiKey required)
+# - qwen3: Qwen3-14B (Both modes supported, OpenAI function calling)
+#   * DEPLOY_MODEL=true: Deploy to cluster via KServe (pulls from HuggingFace)
+#   * DEPLOY_MODEL=false: Use external endpoint (copilot.llmBaseUrl/llamaStack.baseUrl required)
 
 # Provider mode for copilot backend (default: mcp_direct)
 # Options: mcp_direct, llama_stack
@@ -40,18 +64,26 @@ MINIMUM_PASSWORD_LENGTH = 8
 help:
 	@echo "Available targets:"
 	@echo "  install       - Installs quickstart and supporting resources"
-	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, minio.userId, minio.password, pgadmin.email, pgadmin.password"
-	@echo "                  Optional: DEPLOY_MODEL=true (auto-configures model using OCI image)"
-	@echo "                  Example: make install NAMESPACE=myns postgres.userId=postgres postgres.password=pass123 postgres.databaseName=recsys minio.userId=minio minio.password=minio123 pgadmin.email=admin@example.com pgadmin.password=admin123 DEPLOY_MODEL=true"
+	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName"
+	@echo "                  Optional: DEPLOY_MODEL=true, DEPLOY_MINIO=true, DEPLOY_PGADMIN=true, MODEL=nemotron|qwen3, PROVIDER_MODE=mcp_direct|llama_stack"
+	@echo "                  If DEPLOY_MINIO=true: minio.userId, minio.password are required"
+	@echo "                  If DEPLOY_PGADMIN=true: pgadmin.email, pgadmin.password are required"
+	@echo "                  Example (Nemotron): make install NAMESPACE=myns MODEL=nemotron DEPLOY_MODEL=true PROVIDER_MODE=mcp_direct ..."
+	@echo "                  Example (Qwen3): make install NAMESPACE=myns MODEL=qwen3 PROVIDER_MODE=llama_stack copilot.llmApiKey=sk-xxx ..."
 	@echo "  pg-airman-mcp-install - Installs pg-airman-mcp MCP server (builds custom image with libpq5 fix)"
 	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName"
 	@echo "                  Optional: pgairman.accessMode (default: restricted)"
 	@echo "                  Note: First run builds custom image (5-10 minutes), subsequent runs are faster"
 	@echo "  nemotron-model-install - Deploys NVIDIA Nemotron Nano 9B v2 model using KServe"
 	@echo "                  Required: NAMESPACE"
-	@echo "                  Optional: model.storage.s3Bucket (uses OCI container image by default)"
+	@echo "                  Optional: model.storage.s3Bucket, model.storage.uri"
 	@echo "                  Example: make nemotron-model-install NAMESPACE=myns"
 	@echo "                  Note: Uses quay.io/eformat/nvidia-nemotron-nano-9b-v2 OCI image by default"
+	@echo "  qwen3-model-install     - Deploys Qwen3-14B model using KServe"
+	@echo "                  Required: NAMESPACE"
+	@echo "                  Optional: model.storage.s3Bucket, model.storage.uri"
+	@echo "                  Example: make qwen3-model-install NAMESPACE=myns"
+	@echo "                  Note: Pulls from HuggingFace hf://Qwen/Qwen3-14B by default (public, no token needed)"
 	@echo "  copilot-backend-install - Installs copilot backend service (FastAPI orchestration layer)"
 	@echo "                  Required: NAMESPACE"
 	@echo "                  Optional: DEPLOY_MODEL=true (auto-extracts llmBaseUrl, llmModel, and llmApiKey from deployed model)"
@@ -66,19 +98,24 @@ help:
 	@echo "Configuration options (set via environment variables or make arguments):"
 	@echo "  NAMESPACE                - Target namespace (required)"
 	@echo "  DEPLOY_MODEL             - Set to 'true' to auto-deploy and configure LLM model (default: false)"
-	@echo "                             Uses OCI image by default, model name/endpoint/API key auto-extracted"
+	@echo "  DEPLOY_MINIO             - Set to 'true' to deploy MinIO object storage (default: false)"
+	@echo "  DEPLOY_PGADMIN           - Set to 'true' to deploy pgAdmin web UI (default: false)"
+	@echo "  MODEL                    - Model to deploy: nemotron or qwen3 (default: qwen3)"
+	@echo "                             nemotron: NVIDIA Nemotron Nano 9B v2 (custom tool calling, MCP-Direct only)"
+	@echo "                             qwen3: Qwen3 14B via remote LiteLLM (OpenAI function calling, Llama Stack only)"
 	@echo "  PROVIDER_MODE            - LLM provider mode: mcp_direct or llama_stack (default: mcp_direct)"
-	@echo "                             mcp_direct: Backend connects directly to vLLM"
-	@echo "                             llama_stack: Backend uses Llama Stack for LLM inference"
-	@echo "  model.storage.s3Bucket   - S3 bucket path (optional, overrides default OCI image)"
-	@echo "  model.storage.uri        - Custom OCI/URI path (optional, overrides default OCI image)"
+	@echo "                             mcp_direct: Backend connects directly to vLLM (use with MODEL=nemotron)"
+	@echo "                             llama_stack: Backend uses Llama Stack (use with MODEL=qwen3)"
+	@echo "                             NOTE: Nemotron is incompatible with llama_stack mode"
+	@echo "  model.storage.s3Bucket   - S3 bucket path (optional, overrides default OCI image for nemotron)"
+	@echo "  model.storage.uri        - Custom OCI/URI path (optional, overrides default OCI image for nemotron)"
 	@echo "  postgres.userId          - PostgreSQL user ID (required)"
 	@echo "  postgres.password        - PostgreSQL password (required)"
 	@echo "  postgres.databaseName    - PostgreSQL database name (required)"
-	@echo "  minio.userId             - User ID to use for minio installation (required)"
-	@echo "  minio.password           - Password to use for minio installation (required)"
-	@echo "  pgadmin.email            - pgAdmin login email (required)"
-	@echo "  pgadmin.password         - pgAdmin login password (required)"
+	@echo "  minio.userId             - User ID to use for minio installation (required if DEPLOY_MINIO=true)"
+	@echo "  minio.password           - Password to use for minio installation (required if DEPLOY_MINIO=true)"
+	@echo "  pgadmin.email            - pgAdmin login email (required if DEPLOY_PGADMIN=true)"
+	@echo "  pgadmin.password         - pgAdmin login password (required if DEPLOY_PGADMIN=true)"
 	@echo "  pgairman.accessMode      - MCP access mode: restricted or unrestricted (default: restricted)"
 	@echo "  copilot.llmApiKey        - LLM API key (required if DEPLOY_MODEL=false, auto-extracted if true)"
 	@echo "  copilot.llmBaseUrl       - LLM base URL (required if DEPLOY_MODEL=false, auto-extracted if true)"
@@ -150,32 +187,69 @@ check-llm-api-key:
 		exit 1; \
 	fi
 
+# Validation: Prevent Nemotron model with Llama Stack mode
+.PHONY: check-model-provider-compatibility
+check-model-provider-compatibility:
+	@if [ "$(MODEL)" = "nemotron" ] && [ "$(PROVIDER_MODE)" = "llama_stack" ]; then \
+		echo "Error: Nemotron model is not compatible with Llama Stack mode."; \
+		echo "Nemotron uses custom <TOOLCALL> format which Llama Stack does not support."; \
+		echo ""; \
+		echo "Solutions:"; \
+		echo "  1. Use PROVIDER_MODE=llama_stack with qwen3 (accessed via LiteLLM endpoint)"; \
+		echo "  2. Use MODEL=nemotron with PROVIDER_MODE=mcp_direct"; \
+		echo ""; \
+		echo "Example: make install NAMESPACE=myns PROVIDER_MODE=llama_stack"; \
+		exit 1; \
+	fi
+
+# Note: check-hf-token removed - no longer supporting local Llama model deployment
+
 .PHONY: namespace
 namespace:
 	@oc create namespace $(NAMESPACE) &> /dev/null && oc label namespace $(NAMESPACE) modelmesh-enabled=false ||:
 	@oc project $(NAMESPACE) &> /dev/null ||:
 
 .PHONY: install
-install: check-oc-version check-minio-credentials check-postgres-credentials check-pgadmin-credentials namespace
+install: check-oc-version check-postgres-credentials check-model-provider-compatibility namespace
+ifeq ($(DEPLOY_MINIO),true)
+	@$(MAKE) check-minio-credentials
+endif
+ifeq ($(DEPLOY_PGADMIN),true)
+	@$(MAKE) check-pgadmin-credentials
+endif
 ifeq ($(DEPLOY_MODEL),true)
-	@echo "DEPLOY_MODEL=true: Starting model deployment first (non-blocking)..."
+	@echo "DEPLOY_MODEL=true: Starting $(MODEL) model deployment..."
+ifeq ($(MODEL),nemotron)
 	@$(MAKE) nemotron-model-deploy NAMESPACE=$(NAMESPACE) \
 		$(if $(model.storage.s3Bucket),model.storage.s3Bucket=$(model.storage.s3Bucket),) \
 		$(if $(model.storage.uri),model.storage.uri=$(model.storage.uri),)
+else ifeq ($(MODEL),qwen3)
+	@$(MAKE) qwen3-model-deploy NAMESPACE=$(NAMESPACE) \
+		$(if $(model.storage.s3Bucket),model.storage.s3Bucket=$(model.storage.s3Bucket),) \
+		$(if $(model.storage.uri),model.storage.uri=$(model.storage.uri),)
+endif
 	@echo "Model is deploying in the background. Continuing with remaining deployments..."
 endif
+ifeq ($(DEPLOY_MINIO),true)
 	@$(MAKE) minio-install NAMESPACE=$(NAMESPACE)
+else
+	@echo "Skipping MinIO installation (DEPLOY_MINIO=$(DEPLOY_MINIO))"
+endif
 	@$(MAKE) database-install NAMESPACE=$(NAMESPACE)
+ifeq ($(DEPLOY_PGADMIN),true)
 	@$(MAKE) pgadmin-install NAMESPACE=$(NAMESPACE)
+else
+	@echo "Skipping pgAdmin installation (DEPLOY_PGADMIN=$(DEPLOY_PGADMIN))"
+endif
 	@$(MAKE) pg-airman-mcp-install NAMESPACE=$(NAMESPACE)
+	@$(MAKE) copilot-llama-stack-install NAMESPACE=$(NAMESPACE) PROVIDER_MODE=$(PROVIDER_MODE) DEPLOY_MODEL=$(DEPLOY_MODEL) \
+		$(if $(copilot.llmModel),copilot.llmModel=$(copilot.llmModel),) \
+		$(if $(copilot.llmBaseUrl),copilot.llmBaseUrl=$(copilot.llmBaseUrl),) \
+		$(if $(copilot.llmApiKey),copilot.llmApiKey=$(copilot.llmApiKey),)
 	@$(MAKE) copilot-backend-install NAMESPACE=$(NAMESPACE) DEPLOY_MODEL=$(DEPLOY_MODEL) \
 		$(if $(model.storage.s3Bucket),model.storage.s3Bucket=$(model.storage.s3Bucket),) \
 		$(if $(copilot.llmBaseUrl),copilot.llmBaseUrl=$(copilot.llmBaseUrl),) \
 		$(if $(copilot.llmModel),copilot.llmModel=$(copilot.llmModel),) \
-		$(if $(copilot.llmApiKey),copilot.llmApiKey=$(copilot.llmApiKey),)
-	@$(MAKE) copilot-llama-stack-install NAMESPACE=$(NAMESPACE) PROVIDER_MODE=$(PROVIDER_MODE) DEPLOY_MODEL=$(DEPLOY_MODEL) \
-		$(if $(copilot.llmModel),copilot.llmModel=$(copilot.llmModel),) \
-		$(if $(copilot.llmBaseUrl),copilot.llmBaseUrl=$(copilot.llmBaseUrl),) \
 		$(if $(copilot.llmApiKey),copilot.llmApiKey=$(copilot.llmApiKey),)
 	@$(MAKE) copilot-ui-install NAMESPACE=$(NAMESPACE)
 
@@ -296,7 +370,7 @@ else
 endif
 
 .PHONY: uninstall
-uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall nemotron-model-uninstall copilot-llama-stack-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
+uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall nemotron-model-uninstall qwen3-model-uninstall copilot-llama-stack-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
 
 .PHONY: minio-uninstall
 minio-uninstall:
@@ -368,6 +442,48 @@ nemotron-model-uninstall:
 	@echo "Uninstalling nemotron-model helm chart"
 	@helm -n $(NAMESPACE) uninstall nemotron-model || true
 
+# Deploy Qwen3-14B model using KServe (non-blocking - just starts deployment)
+.PHONY: qwen3-model-deploy
+qwen3-model-deploy:
+	@echo "Deploying Qwen3-14B model using KServe..."
+	@echo "Using HuggingFace model: hf://Qwen/Qwen3-14B"
+	@helm -n $(NAMESPACE) upgrade --install qwen3-model $(QWEN3_MODEL_CHART) \
+		$(if $(model.storage.s3Bucket),--set model.storage.type=s3 --set model.storage.s3Bucket=$(model.storage.s3Bucket),) \
+		$(if $(model.storage.uri),--set model.storage.uri=$(model.storage.uri),) \
+		--timeout 15m
+	@echo "Model deployment started. It will be ready in 10-15 minutes (Qwen3-14B is larger than Nemotron)."
+	@echo "You can monitor progress with: oc get inferenceservice qwen3-14b -n $(NAMESPACE) -w"
+
+# Wait for Qwen3-14B model to be ready
+.PHONY: qwen3-model-wait
+qwen3-model-wait:
+	@echo "Waiting for InferenceService to be ready (this may take 10-15 minutes for model download)..."
+	@bash -c 'start_time=$$(date +%s); \
+		while true; do \
+			if oc get inferenceservice qwen3-14b -n $(NAMESPACE) -o jsonpath="{.status.conditions[?(@.type==\"Ready\")].status}" 2>/dev/null | grep -q "True"; then \
+				break; \
+			fi; \
+			elapsed=$$(($$(date +%s) - start_time)); \
+			if [ $$elapsed -gt 900 ]; then \
+				echo "Timeout waiting for model deployment. Check status with: oc get inferenceservice qwen3-14b -n $(NAMESPACE)"; \
+				exit 1; \
+			fi; \
+			echo "Waiting for model to be ready... ($$elapsed seconds elapsed)"; \
+			sleep 15; \
+		done'
+	@echo "Model deployment complete!"
+	@echo "Model endpoint: https://$$(oc get route qwen3-14b -o jsonpath='{.spec.host}' -n $(NAMESPACE))"
+
+# Deploy and wait for Qwen3-14B model (convenience target)
+.PHONY: qwen3-model-install
+qwen3-model-install: qwen3-model-deploy qwen3-model-wait
+
+# Uninstall qwen3-model
+.PHONY: qwen3-model-uninstall
+qwen3-model-uninstall:
+	@echo "Uninstalling qwen3-model helm chart"
+	@helm -n $(NAMESPACE) uninstall qwen3-model || true
+
 # Build copilot-backend custom image
 .PHONY: build-copilot-backend-image
 build-copilot-backend-image:
@@ -384,36 +500,96 @@ build-copilot-backend-image:
 .PHONY: copilot-backend-install
 copilot-backend-install: build-copilot-backend-image
 ifeq ($(DEPLOY_MODEL),true)
-	@echo "DEPLOY_MODEL=true: Waiting for LLM model to be ready..."
+	@echo "DEPLOY_MODEL=true: Waiting for $(MODEL) model to be ready..."
+ifeq ($(MODEL),nemotron)
 	@$(MAKE) nemotron-model-wait NAMESPACE=$(NAMESPACE)
-	@echo "Extracting model configuration from deployment..."
+	@echo "Extracting nemotron model configuration from deployment..."
 	@MODEL_NAME=$$(oc get inferenceservice -n $(NAMESPACE) -l release=nemotron-model -o jsonpath='{.items[0].metadata.name}'); \
 	MODEL_URL="https://$$(oc get route $$MODEL_NAME -o jsonpath='{.spec.host}' -n $(NAMESPACE))/v1"; \
 	MODEL_API_KEY=$$(oc get secret default-name-$$MODEL_NAME-sa -n $(NAMESPACE) -o jsonpath='{.data.token}' | base64 -d); \
 	echo "Model name: $$MODEL_NAME"; \
 	echo "Model endpoint: $$MODEL_URL"; \
 	echo "Model API key: [extracted from service account token secret]"; \
-	echo "Installing copilot-backend with auto-configured model settings..."; \
-	helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
-		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
-		--set image.tag=latest \
-		--set image.pullPolicy=Always \
-		--set llm.baseUrl=$$MODEL_URL \
-		--set llm.model=$$MODEL_NAME \
-		--set llm.apiKey=$$MODEL_API_KEY \
-		$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
-		--timeout 5m
+	if [ "$(PROVIDER_MODE)" = "llama_stack" ]; then \
+		echo "ERROR: Nemotron model is incompatible with llama_stack mode. Use PROVIDER_MODE=mcp_direct for nemotron."; \
+		exit 1; \
+	else \
+		echo "Installing copilot-backend in mcp_direct mode with nemotron model settings..."; \
+		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
+			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
+			--set image.tag=latest \
+			--set image.pullPolicy=Always \
+			--set provider.mode=$(PROVIDER_MODE) \
+			--set llm.baseUrl=$$MODEL_URL \
+			--set llm.model=$$MODEL_NAME \
+			--set llm.apiKey=$$MODEL_API_KEY \
+			$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
+			--timeout 5m; \
+	fi
+else ifeq ($(MODEL),qwen3)
+	@$(MAKE) qwen3-model-wait NAMESPACE=$(NAMESPACE)
+	@echo "Extracting qwen3 model configuration from deployment..."
+	@MODEL_NAME=$$(oc get inferenceservice -n $(NAMESPACE) -l release=qwen3-model -o jsonpath='{.items[0].metadata.name}'); \
+	MODEL_URL="https://$$(oc get route $$MODEL_NAME -o jsonpath='{.spec.host}' -n $(NAMESPACE))/v1"; \
+	MODEL_API_KEY=$$(oc get secret default-name-$$MODEL_NAME-sa -n $(NAMESPACE) -o jsonpath='{.data.token}' | base64 -d); \
+	echo "Model name: $$MODEL_NAME"; \
+	echo "Model endpoint: $$MODEL_URL"; \
+	echo "Model API key: [extracted from service account token secret]"; \
+	if [ "$(PROVIDER_MODE)" = "llama_stack" ]; then \
+		echo "Installing copilot-backend in llama_stack mode with qwen3 model settings..."; \
+		LLAMA_STACK_URL="http://$(LLAMA_STACK_DISTRIBUTION_NAME)-service:$(LLAMA_STACK_SERVICE_PORT)"; \
+		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
+			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
+			--set image.tag=latest \
+			--set image.pullPolicy=Always \
+			--set provider.mode=$(PROVIDER_MODE) \
+			--set llamaStack.baseUrl=$$LLAMA_STACK_URL \
+			--set llamaStack.vllmBaseUrl=$$MODEL_URL \
+			--set llamaStack.vllmModel=$$MODEL_NAME \
+			--set llamaStack.vllmApiKey=$$MODEL_API_KEY \
+			$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
+			--timeout 5m; \
+	else \
+		echo "Installing copilot-backend in mcp_direct mode with qwen3 model settings..."; \
+		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
+			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
+			--set image.tag=latest \
+			--set image.pullPolicy=Always \
+			--set provider.mode=$(PROVIDER_MODE) \
+			--set llm.baseUrl=$$MODEL_URL \
+			--set llm.model=$$MODEL_NAME \
+			--set llm.apiKey=$$MODEL_API_KEY \
+			$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
+			--timeout 5m; \
+	fi
+endif
 else
 	@echo "Installing copilot-backend with configured model endpoint..."
-	@helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
-		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
-		--set image.tag=latest \
-		--set image.pullPolicy=Always \
-		$(if $(copilot.llmBaseUrl),--set llm.baseUrl=$(copilot.llmBaseUrl),) \
-		$(if $(copilot.llmModel),--set llm.model=$(copilot.llmModel),) \
-		$(if $(copilot.llmApiKey),--set llm.apiKey=$(copilot.llmApiKey),) \
-		$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
-		--timeout 5m
+	@if [ "$(PROVIDER_MODE)" = "llama_stack" ]; then \
+		echo "Installing copilot-backend in llama_stack mode..."; \
+		LLAMA_STACK_URL="http://$(LLAMA_STACK_DISTRIBUTION_NAME)-service:$(LLAMA_STACK_SERVICE_PORT)"; \
+		echo "Llama Stack URL: $$LLAMA_STACK_URL"; \
+		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
+			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
+			--set image.tag=latest \
+			--set image.pullPolicy=Always \
+			--set provider.mode=$(PROVIDER_MODE) \
+			--set llamaStack.baseUrl=$$LLAMA_STACK_URL \
+			$(if $(copilot.llamaStackModel),--set llamaStack.model=$(copilot.llamaStackModel),) \
+			--timeout 5m; \
+	else \
+		echo "Installing copilot-backend in mcp_direct mode..."; \
+		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
+			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
+			--set image.tag=latest \
+			--set image.pullPolicy=Always \
+			--set provider.mode=$(PROVIDER_MODE) \
+			$(if $(copilot.llmBaseUrl),--set llm.baseUrl=$(copilot.llmBaseUrl),) \
+			$(if $(copilot.llmModel),--set llm.model=$(copilot.llmModel),) \
+			$(if $(copilot.llmApiKey),--set llm.apiKey=$(copilot.llmApiKey),) \
+			$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
+			--timeout 5m; \
+	fi
 endif
 	@echo "Waiting for copilot-backend to be ready..."
 	@oc rollout status deployment/copilot-backend -n $(NAMESPACE) --timeout=300s
@@ -429,38 +605,53 @@ copilot-backend-uninstall:
 
 # Install Llama Stack distribution (conditional on PROVIDER_MODE)
 .PHONY: copilot-llama-stack-install
-copilot-llama-stack-install:
+copilot-llama-stack-install: check-model-provider-compatibility
 ifeq ($(PROVIDER_MODE),llama_stack)
 ifeq ($(DEPLOY_MODEL),true)
-	@echo "PROVIDER_MODE=llama_stack with DEPLOY_MODEL=true: Extracting model configuration..."
-	@$(MAKE) nemotron-model-wait NAMESPACE=$(NAMESPACE)
-	@MODEL_NAME=$$(oc get inferenceservice -n $(NAMESPACE) -l release=nemotron-model -o jsonpath='{.items[0].metadata.name}'); \
+	@echo "DEPLOY_MODEL=true: Waiting for $(MODEL) model to be ready before configuring Llama Stack..."
+ifeq ($(MODEL),qwen3)
+	@$(MAKE) qwen3-model-wait NAMESPACE=$(NAMESPACE)
+	@echo "Extracting qwen3 model configuration for Llama Stack..."
+	@MODEL_NAME=$$(oc get inferenceservice -n $(NAMESPACE) -l release=qwen3-model -o jsonpath='{.items[0].metadata.name}'); \
 	MODEL_URL="https://$$(oc get route $$MODEL_NAME -o jsonpath='{.spec.host}' -n $(NAMESPACE))/v1"; \
 	MODEL_API_KEY=$$(oc get secret default-name-$$MODEL_NAME-sa -n $(NAMESPACE) -o jsonpath='{.data.token}' | base64 -d); \
-	echo "Installing Llama Stack with model: $$MODEL_NAME"; \
-	echo "Model endpoint: $$MODEL_URL"; \
-	helm -n $(NAMESPACE) upgrade --install copilot-llama-stack $(COPILOT_LLAMA_STACK_CHART) \
-		--set distribution.name=copilot-llama-stack \
+	echo "Model name: $$MODEL_NAME"; \
+	echo "Model URL: $$MODEL_URL"; \
+	echo "Model API key: [extracted from service account token secret]"; \
+	echo "Installing Llama Stack with deployed Qwen3 model..."; \
+	helm -n $(NAMESPACE) upgrade --install $(LLAMA_STACK_DISTRIBUTION_NAME) $(COPILOT_LLAMA_STACK_CHART) \
+		--set distribution.name=$(LLAMA_STACK_DISTRIBUTION_NAME) \
+		--set container.port=$(LLAMA_STACK_SERVICE_PORT) \
 		--set model.name=$$MODEL_NAME \
 		--set model.url=$$MODEL_URL \
 		--set model.apiKey=$$MODEL_API_KEY \
 		--timeout 10m
 else
-	@echo "Installing Llama Stack with configured model endpoint..."
-	@helm -n $(NAMESPACE) upgrade --install copilot-llama-stack $(COPILOT_LLAMA_STACK_CHART) \
-		--set distribution.name=copilot-llama-stack \
-		$(if $(copilot.llmModel),--set model.name=$(copilot.llmModel),) \
-		$(if $(copilot.llmBaseUrl),--set model.url=$(copilot.llmBaseUrl),) \
+	@echo "ERROR: DEPLOY_MODEL=true with llama_stack mode requires MODEL=qwen3"
+	@echo "Nemotron cannot be used with Llama Stack."
+	@exit 1
+endif
+else
+	@echo "Installing Llama Stack with external model endpoint..."
+	@LLAMA_STACK_BASE_URL=$$(if $(copilot.llmBaseUrl),echo $(copilot.llmBaseUrl),yq e '.llamaStack.baseUrl' $(COPILOT_BACKEND_CHART)/values.yaml); \
+	LLAMA_STACK_MODEL=$$(if $(copilot.llmModel),echo $(copilot.llmModel),yq e '.llamaStack.model' $(COPILOT_BACKEND_CHART)/values.yaml); \
+	echo "Using baseUrl: $$LLAMA_STACK_BASE_URL"; \
+	echo "Using model: $$LLAMA_STACK_MODEL"; \
+	helm -n $(NAMESPACE) upgrade --install $(LLAMA_STACK_DISTRIBUTION_NAME) $(COPILOT_LLAMA_STACK_CHART) \
+		--set distribution.name=$(LLAMA_STACK_DISTRIBUTION_NAME) \
+		--set container.port=$(LLAMA_STACK_SERVICE_PORT) \
+		--set model.name=$$LLAMA_STACK_MODEL \
+		--set model.url=$$LLAMA_STACK_BASE_URL \
 		$(if $(copilot.llmApiKey),--set model.apiKey=$(copilot.llmApiKey),) \
 		--timeout 10m
 endif
 	@echo "Waiting for Llama Stack to be ready..."
 	@sleep 10
 	@oc wait --for=jsonpath='{.status.conditions[?(@.type=="DeploymentReady")].status}=True' \
-		llamastackdistribution/copilot-llama-stack -n $(NAMESPACE) --timeout=600s || \
-		(echo "Llama Stack deployment failed. Check logs with: oc logs -l app.kubernetes.io/name=copilot-llama-stack -n $(NAMESPACE)" && exit 1)
+		llamastackdistribution/$(LLAMA_STACK_DISTRIBUTION_NAME) -n $(NAMESPACE) --timeout=600s || \
+		(echo "Llama Stack deployment failed. Check logs with: oc logs -l app.kubernetes.io/name=$(LLAMA_STACK_DISTRIBUTION_NAME) -n $(NAMESPACE)" && exit 1)
 	@echo "Llama Stack installation complete."
-	@echo "Service URL (internal): http://copilot-llama-stack-service:8321"
+	@echo "Service URL (internal): http://$(LLAMA_STACK_DISTRIBUTION_NAME)-service:$(LLAMA_STACK_SERVICE_PORT)"
 	@echo "Public route: https://$$(oc get route llama-stack-api -o jsonpath='{.spec.host}' -n $(NAMESPACE))"
 else
 	@echo "Skipping Llama Stack installation (PROVIDER_MODE=$(PROVIDER_MODE))"
@@ -470,10 +661,10 @@ endif
 .PHONY: copilot-llama-stack-uninstall
 copilot-llama-stack-uninstall:
 	@echo "Uninstalling Llama Stack helm chart"
-	@-helm -n $(NAMESPACE) uninstall copilot-llama-stack 2>/dev/null || echo "Llama Stack chart not installed"
+	@-helm -n $(NAMESPACE) uninstall $(LLAMA_STACK_DISTRIBUTION_NAME) 2>/dev/null || echo "Llama Stack chart not installed"
 	@echo "Cleaning up Llama Stack PVCs (if any)..."
 	@-oc get pvc -n $(NAMESPACE) -o json | \
-		jq -r '.items[] | select(.metadata.ownerReferences[]?.name | contains("copilot-llama-stack")) | .metadata.name' | \
+		jq -r '.items[] | select(.metadata.ownerReferences[]?.name | contains("$(LLAMA_STACK_DISTRIBUTION_NAME)")) | .metadata.name' | \
 		xargs -I {} oc delete pvc {} -n $(NAMESPACE) 2>/dev/null || echo "No Llama Stack PVCs found"
 
 # Build copilot-ui custom image

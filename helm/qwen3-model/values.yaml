@@ -1,0 +1,71 @@
+# Model deployment configuration
+model:
+  name: qwen3-14b
+  displayName: "Qwen3-14B"
+
+  # Model storage configuration
+  storage:
+    # Options: pvc, s3, uri (oci container image, hf, http/https)
+    type: uri
+    # Hugging Face model (public, no auth required)
+    # Using AWQ 4-bit quantized version for A10G (24GB VRAM)
+    # AWQ: ~7GB VRAM, minimal quality loss (<1% MMLU)
+    uri: "hf://Qwen/Qwen3-14B-AWQ"
+    # S3 bucket containing the model (alternative)
+    s3Bucket: ""
+    # PVC name if using PVC storage (alternative)
+    pvcName: ""
+
+  # Runtime configuration
+  runtime:
+    name: qwen3-14b
+    # vLLM arguments for model serving with tool calling support
+    # Note: AWQ quantization enabled for 24GB GPU compatibility
+    args:
+      - --quantization
+      - awq
+      - --max-model-len=32768
+      - --enforce_eager
+      - --gpu-memory-utilization
+      - "0.95"
+      - --max-num-seqs
+      - "4"
+      - --task=generate
+      - --trust_remote_code
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - hermes
+      - --reasoning-parser
+      - qwen3
+
+  # Resource limits (Qwen3-14B-AWQ optimized for A10G 24GB GPU)
+  # Note: AWQ 4-bit quantization reduces VRAM from ~28GB to ~8GB
+  # CPU reduced for resource-constrained clusters (GPU does the heavy lifting)
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+      cpu: "2"
+      memory: "16Gi"
+    requests:
+      nvidia.com/gpu: 1
+      cpu: "1"
+      memory: "12Gi"
+
+  # Scaling configuration
+  scaling:
+    minReplicas: 1
+    maxReplicas: 1
+
+# Route configuration
+route:
+  enabled: true
+  # Timeout for long-running inference requests (10 minutes)
+  timeout: "600s"
+  # oauth-proxy upstream timeout (10 minutes)
+  # This is critical for long-running LLM inference
+  oauthProxyUpstreamTimeout: "10m"
+
+# Security configuration
+security:
+  # Enable OAuth authentication via oauth-proxy
+  enableAuth: true

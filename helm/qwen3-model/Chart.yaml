@@ -1,0 +1,6 @@
+apiVersion: v2
+name: qwen3-model
+description: Qwen3-14B model deployment using KServe with tool calling support
+type: application
+version: 0.1.0
+appVersion: "1.0"

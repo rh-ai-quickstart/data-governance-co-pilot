@@ -7,7 +7,7 @@ This directory contains Helm charts for deploying the data governance solution c
 - **pgvector** - PostgreSQL database with pgvector extension
 - **minio** - Object storage for data assets
 - **pgadmin** - Database administration UI
-- **pg-airman-mcp** - MCP server for PostgreSQL database operations
+- **pg-airman-mcp** - EnterpriseDB's MCP server for enabling agentic applications that connect to PostgreSQL databases
 - **copilot-backend** - Microservice to support the user interface (contains MCP client)
 - **copilot-ui** - Sveltekit based user interface
 - **nemotron-model** - Deployment artifacts for Nvidia's Nemotron Nano v2 model

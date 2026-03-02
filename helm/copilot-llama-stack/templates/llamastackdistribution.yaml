@@ -15,6 +15,10 @@ spec:
     containerSpec:
       name: {{ .Values.container.name }}
       port: {{ .Values.container.port }}
+{{- if .Values.container.resources }}
+      resources:
+        {{- toYaml .Values.container.resources | nindent 8 }}
+{{- end }}
       env:
         - name: INFERENCE_MODEL
           value: {{ printf "vllm-inference/%s" .Values.model.name | quote }}

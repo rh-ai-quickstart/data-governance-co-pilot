@@ -31,12 +31,15 @@ spec:
 
       WORKDIR /tmp/pg-airman-mcp
 
-      # Apply patch to disable DNS rebinding protection for Kubernetes
-      # This is required because MCP SDK v1.8.0+ has strict Host header validation
-      # that rejects requests from Kubernetes service DNS names
+      # Apply patches:
+      # 1. Disable DNS rebinding protection for Kubernetes (MCP SDK v1.8.0+ has strict Host header validation)
+      # 2. Add REQUIRED noop parameter as STRING to match list_objects pattern
+      #    (String type matches working schema_name parameter in list_objects)
       RUN sed -i '/from mcp.server.fastmcp import FastMCP/a from mcp.server.transport_security import TransportSecuritySettings' src/pg_airman_mcp/server.py && \
+          sed -i 's/from pydantic import BaseModel/from pydantic import BaseModel, Field/' src/pg_airman_mcp/server.py && \
           sed -i 's/mcp = FastMCP("pg-airman-mcp")/mcp = FastMCP(\n    "pg-airman-mcp",\n    transport_security=TransportSecuritySettings(\n        enable_dns_rebinding_protection=False,\n    )\n)/' src/pg_airman_mcp/server.py && \
-          echo "Successfully patched server.py to disable DNS rebinding protection"
+          sed -i "s/async def list_schemas() -> ResponseType:/async def list_schemas(noop: str = Field(description=\"Workaround parameter, always use 'doit'\")) -> ResponseType:/" src/pg_airman_mcp/server.py && \
+          echo "Successfully patched server.py"
 
       # Install Python dependencies AND the project itself using uv pip
       RUN uv venv /tmp/pg-airman-mcp/.venv && \

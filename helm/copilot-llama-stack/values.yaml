@@ -9,6 +9,15 @@ distribution:
 container:
   name: llama-stack
   port: 8321
+  # Resource limits for Llama Stack container
+  # Note: Llama Stack is a lightweight proxy - does not need much CPU
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
 
 # LLM Model configuration (aligned with nemotron-model or external deployment)
 model:

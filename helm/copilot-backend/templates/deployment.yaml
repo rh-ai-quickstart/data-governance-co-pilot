@@ -28,19 +28,36 @@ spec:
           containerPort: 8080
           protocol: TCP
         env:
+        # Provider Configuration
+        - name: COPILOT_PROVIDER_MODE
+          value: "{{ .Values.provider.mode }}"
+
+        # MCP Server Configuration (both modes)
         - name: PG_AIRMAN_MCP_SERVICE_PORT
           value: "{{ .Values.mcp.serviceUrl }}"
+        - name: PG_AIRMAN_MCP_SERVICE_URL
+          value: "{{ .Values.mcp.serviceUrl }}"
+
+        # MCP-Direct Mode Configuration
         - name: LLM_BASE_URL
           value: "{{ .Values.llm.baseUrl }}"
         - name: LLM_MODEL
           value: "{{ .Values.llm.model }}"
         - name: LLM_MAX_CONTEXT_LENGTH
           value: "{{ .Values.llm.maxContextLength }}"
+        - name: LLM_TOOL_CALL_FORMAT
+          value: "{{ .Values.llm.toolCallFormat }}"
         - name: LLM_API_KEY
           valueFrom:
             secretKeyRef:
               name: {{ include "copilot-backend.fullname" . }}
               key: LLM_API_KEY
+
+        # Llama Stack Mode Configuration
+        - name: LLAMA_STACK_BASE_URL
+          value: "{{ .Values.llamaStack.baseUrl }}"
+        - name: LLAMA_STACK_MODEL
+          value: "vllm-inference/{{ .Values.llamaStack.model }}"
         livenessProbe:
           {{- toYaml .Values.livenessProbe | nindent 10 }}
         readinessProbe:

@@ -1,0 +1,126 @@
+{{- if .Values.security.enableAuth }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.model.name }}-oauth-proxy-patch
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: {{ .Values.model.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      name: {{ .Values.model.name }}-oauth-proxy-patch
+    spec:
+      serviceAccountName: {{ .Values.model.name }}-patch-sa
+      restartPolicy: OnFailure
+      containers:
+        - name: patch-oauth-proxy
+          image: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "Waiting for predictor deployment to be created..."
+
+              # Wait up to 10 minutes for the deployment to exist
+              for i in {1..60}; do
+                if oc get deployment {{ .Values.model.name }}-predictor -n {{ .Release.Namespace }} &>/dev/null; then
+                  echo "Deployment found!"
+                  break
+                fi
+                echo "Waiting for deployment... (attempt $i/60)"
+                sleep 10
+              done
+
+              # Verify deployment exists
+              if ! oc get deployment {{ .Values.model.name }}-predictor -n {{ .Release.Namespace }} &>/dev/null; then
+                echo "ERROR: Deployment {{ .Values.model.name }}-predictor not found after 10 minutes"
+                exit 1
+              fi
+
+              echo "Checking if oauth-proxy container exists..."
+              if ! oc get deployment {{ .Values.model.name }}-predictor -n {{ .Release.Namespace }} -o json | jq -e '.spec.template.spec.containers[] | select(.name=="oauth-proxy")' &>/dev/null; then
+                echo "WARNING: oauth-proxy container not found in deployment. Skipping patch."
+                exit 0
+              fi
+
+              echo "Checking if upstream-timeout is already configured..."
+              if oc get deployment {{ .Values.model.name }}-predictor -n {{ .Release.Namespace }} -o json | jq -e '.spec.template.spec.containers[] | select(.name=="oauth-proxy") | .args[] | select(contains("--upstream-timeout"))' &>/dev/null; then
+                echo "upstream-timeout already configured. Skipping patch."
+                exit 0
+              fi
+
+              echo "Patching oauth-proxy container to add upstream-timeout={{ .Values.route.oauthProxyUpstreamTimeout }}..."
+              oc get deployment {{ .Values.model.name }}-predictor -n {{ .Release.Namespace }} -o json | \
+                jq '.spec.template.spec.containers |= map(if .name == "oauth-proxy" then .args += ["--upstream-timeout={{ .Values.route.oauthProxyUpstreamTimeout }}"] else . end)' | \
+                oc apply -f -
+
+              echo "Successfully patched oauth-proxy container!"
+
+              # Wait for rollout to complete
+              echo "Waiting for deployment rollout to complete..."
+              oc rollout status deployment/{{ .Values.model.name }}-predictor -n {{ .Release.Namespace }} --timeout=5m
+
+              echo "OAuth-proxy patch completed successfully!"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.model.name }}-patch-sa
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  labels:
+    app: {{ .Values.model.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.model.name }}-patch-role
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  labels:
+    app: {{ .Values.model.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/status"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.model.name }}-patch-rolebinding
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+  labels:
+    app: {{ .Values.model.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Values.model.name }}-patch-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.model.name }}-patch-sa
+    namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -174,16 +174,65 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
    cd data-governance-co-pilot
    ```
 
-3a. **Full Installation (with llama stack backend)**:
+3a. **Full Installation (with Llama Stack backend + Llama 3.1 model)**:
    ```bash
-   make install NAMESPACE=your-namespace PROVIDER_MODE=llama_stack DEPLOY_MODEL=true postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres minio.userId=minio minio.password=minio1234! pgadmin.email=yourname@redhat.com pgadmin.password=postgres
-   ```
-3b. **Full Installation (with MCP direct backend)**:
-   ```bash
-   make install NAMESPACE=your-namespace PROVIDER_MODE=mcp_direct DEPLOY_MODEL=true postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres minio.userId=minio minio.password=minio1234! pgadmin.email=yourname@redhat.com pgadmin.password=postgres
+   make install NAMESPACE=your-namespace \
+     PROVIDER_MODE=llama_stack \
+     DEPLOY_MODEL=true \
+     MODEL=llama \
+     HF_TOKEN=your-huggingface-token \
+     postgres.userId=postgres \
+     postgres.password=postgres \
+     postgres.databaseName=postgres \
+     minio.userId=minio \
+     minio.password=minio1234! \
+     pgadmin.email=yourname@redhat.com \
+     pgadmin.password=postgres
    ```
 
-You can also deploy the quickstart using an existing model. Specify DEPLOY_MODEL=false and provide the URL endpoint and model name in the values.yaml file in the copilot-backend and copilot-llama-stack project. You must then provide the api key at the terminal by setting copilot.llmApiKey=your_key_here.
+3b. **Full Installation (with MCP Direct backend + Nemotron model)**:
+   ```bash
+   make install NAMESPACE=your-namespace \
+     PROVIDER_MODE=mcp_direct \
+     DEPLOY_MODEL=true \
+     MODEL=nemotron \
+     postgres.userId=postgres \
+     postgres.password=postgres \
+     postgres.databaseName=postgres \
+     minio.userId=minio \
+     minio.password=minio1234! \
+     pgadmin.email=yourname@redhat.com \
+     pgadmin.password=postgres
+   ```
+
+3c. **Full Installation (with MCP Direct backend + Llama 3.1 model)**:
+   ```bash
+   make install NAMESPACE=your-namespace \
+     PROVIDER_MODE=mcp_direct \
+     DEPLOY_MODEL=true \
+     MODEL=llama \
+     HF_TOKEN=your-huggingface-token \
+     postgres.userId=postgres \
+     postgres.password=postgres \
+     postgres.databaseName=postgres \
+     minio.userId=minio \
+     minio.password=minio1234! \
+     pgadmin.email=yourname@redhat.com \
+     pgadmin.password=postgres
+   ```
+
+**HuggingFace Token Setup (Required for Llama models)**:
+
+When deploying Llama 3.1 model (`MODEL=llama`), you must provide a HuggingFace token:
+
+1. Create account at https://huggingface.co
+2. Accept the Llama 3.1 license at https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct
+3. Generate access token at https://huggingface.co/settings/tokens
+4. Use the token in the `HF_TOKEN` parameter
+
+**Using Existing Models**:
+
+You can also deploy the quickstart using an existing model by specifying `DEPLOY_MODEL=false` and providing the URL endpoint and model name in the values.yaml file in the copilot-backend and copilot-llama-stack helm charts. You must then provide the API key at the terminal by setting `copilot.llmApiKey=your_key_here`.
 
 ### Deployment Options
 
@@ -198,27 +247,38 @@ This mode deploys a vLLM model instance and manages the agentic loop in the back
 make install NAMESPACE=$NAMESPACE \
   PROVIDER_MODE=mcp_direct \
   DEPLOY_MODEL=true \
+  MODEL=nemotron \
   postgres.userId=<your-db-user> \
   postgres.password=<your-db-password> \
-  postgres.host=<your-db-host> \
-  postgres.port=5432 \
-  postgres.database=<your-db-name>
+  postgres.databaseName=<your-db-name>
 ```
 
-**Deploy with Llama 3.1 Model** (requires vLLM with function calling support):
+**Deploy with Llama 3.1 Model** (requires HuggingFace token):
 ```bash
 # The application will automatically deploy Llama 3.1 vLLM instance with required flags:
-# --enable-auto-tool-choice --tool-call-parser llama3_json
+# --enable-auto-tool-choice --tool-call-parser llama3_json --max-model-len 32768
 
 make install NAMESPACE=$NAMESPACE \
   PROVIDER_MODE=mcp_direct \
-  llm.model=meta-llama/Llama-3.1-8B-Instruct \
-  llm.baseUrl=<your-vllm-url> \
+  DEPLOY_MODEL=true \
+  MODEL=llama \
+  HF_TOKEN=<your-huggingface-token> \
   postgres.userId=<your-db-user> \
   postgres.password=<your-db-password> \
-  postgres.host=<your-db-host> \
-  postgres.port=5432 \
-  postgres.database=<your-db-name>
+  postgres.databaseName=<your-db-name>
+```
+
+**Using External vLLM Instance**:
+```bash
+make install NAMESPACE=$NAMESPACE \
+  PROVIDER_MODE=mcp_direct \
+  DEPLOY_MODEL=false \
+  llm.model=<model-name> \
+  llm.baseUrl=<your-vllm-url> \
+  copilot.llmApiKey=<your-api-key> \
+  postgres.userId=<your-db-user> \
+  postgres.password=<your-db-password> \
+  postgres.databaseName=<your-db-name>
 ```
 
 #### Option 2: Llama Stack Mode
@@ -227,27 +287,42 @@ This mode leverages OpenShift AI's Llama Stack operator for agent orchestration.
 
 **Prerequisites**:
 - OpenShift AI 3.2+ installed on cluster
-- vLLM model deployed with function calling support:
-  ```
-  --enable-auto-tool-choice --tool-call-parser llama3_json
-  ```
+- Llama Stack requires models with OpenAI function calling support (Nemotron is not compatible)
 
-**Deploy**:
+**Deploy with Auto-Deployed Llama 3.1 Model**:
 ```bash
 make install NAMESPACE=$NAMESPACE \
   PROVIDER_MODE=llama_stack \
+  DEPLOY_MODEL=true \
+  MODEL=llama \
+  HF_TOKEN=<your-huggingface-token> \
   postgres.userId=<your-db-user> \
   postgres.password=<your-db-password> \
-  postgres.host=<your-db-host> \
-  postgres.port=5432 \
-  postgres.database=<your-db-name>
+  postgres.databaseName=<your-db-name>
+```
+
+**Deploy with Existing vLLM Model**:
+```bash
+# Ensure your vLLM model has these flags:
+# --enable-auto-tool-choice --tool-call-parser llama3_json
+
+make install NAMESPACE=$NAMESPACE \
+  PROVIDER_MODE=llama_stack \
+  DEPLOY_MODEL=false \
+  llamaStack.model=vllm-inference/<your-model-name> \
+  postgres.userId=<your-db-user> \
+  postgres.password=<your-db-password> \
+  postgres.databaseName=<your-db-name>
 ```
 
 This automatically deploys:
+- Llama 3.1 vLLM model with function calling support (if DEPLOY_MODEL=true)
 - LlamaStackDistribution custom resource
 - MCP server with SSE transport
 - Copilot backend configured for Llama Stack
 - Web UI
+
+**Important**: Nemotron models use a custom `<TOOLCALL>` format that is incompatible with Llama Stack. The Makefile includes validation to prevent this invalid configuration.
 
 ### Verify Deployment
 
@@ -260,7 +335,10 @@ This automatically deploys:
    - `copilot-ui-*` - Web interface
    - `copilot-backend-*` - FastAPI backend
    - `pg-airman-mcp-*` - MCP server
-   - `copilot-llama-stack-*` (Llama Stack mode) or `nvidia-nemotron-*` (Custom MCP Client mode)
+   - Model pods (if DEPLOY_MODEL=true):
+     - `meta-llama-llama-31-8b-instruct-predictor-*` (MODEL=llama)
+     - `nvidia-nemotron-nano-9b-v2-predictor-*` (MODEL=nemotron)
+   - `copilot-llama-stack-*` (Llama Stack mode only)
 
 2. **Access the UI**:
    ```bash
@@ -280,12 +358,17 @@ The Makefile supports several configuration parameters:
 
 ```bash
 # Provider mode
-PROVIDER_MODE=mcp_direct        # or llama_stack
+PROVIDER_MODE=mcp_direct        # Options: mcp_direct (default), llama_stack
 
-# Model deployment (Custom MCP Client mode only)
-DEPLOY_MODEL=true               # Deploy Nemotron model
-llm.model=<model-name>          # Model identifier
-llm.baseUrl=<vllm-url>          # External vLLM endpoint
+# Model selection and deployment
+MODEL=nemotron                  # Options: nemotron (default), llama
+DEPLOY_MODEL=true               # Options: true (auto-deploy), false (use existing)
+HF_TOKEN=<your-token>           # Required when MODEL=llama and DEPLOY_MODEL=true
+
+# Model deployment options (when DEPLOY_MODEL=false)
+llm.model=<model-name>          # Model identifier for Custom MCP Client mode
+llm.baseUrl=<vllm-url>          # External vLLM endpoint for Custom MCP Client mode
+copilot.llmApiKey=<api-key>     # API key for external vLLM
 
 # Llama Stack configuration (Llama Stack mode only)
 llamaStack.model=<model-id>     # Model ID in vllm-inference/<name> format
@@ -293,19 +376,59 @@ llamaStack.model=<model-id>     # Model ID in vllm-inference/<name> format
 # Database credentials
 postgres.userId=<username>
 postgres.password=<password>
-postgres.host=<hostname>
-postgres.port=5432
-postgres.database=<db-name>
+postgres.databaseName=<db-name>
+postgres.host=<hostname>        # Optional, defaults to deployed PostgreSQL
+postgres.port=5432              # Optional
 
 # Tool call format (Custom MCP Client mode, optional)
-llm.toolCallFormat=auto         # auto, nemotron, or openai
+llm.toolCallFormat=auto         # Options: auto (default), nemotron, openai
+                                # auto: detects from model name
 ```
+
+**Model Compatibility Matrix**:
+
+| MODEL | PROVIDER_MODE | HF_TOKEN Required | Tool Format | Notes |
+|-------|---------------|-------------------|-------------|-------|
+| nemotron | mcp_direct | No | Custom tags | Default configuration |
+| llama | mcp_direct | Yes | OpenAI | Standard function calling |
+| nemotron | llama_stack | N/A | N/A | **Invalid** - Makefile prevents this |
+| llama | llama_stack | Yes | OpenAI | Recommended for Llama Stack |
 
 ### Troubleshooting
 
+**HuggingFace Authentication Errors**:
+If Llama model deployment fails with authentication errors:
+```bash
+# Check the InferenceService events
+oc describe inferenceservice meta-llama-llama-31-8b-instruct -n $NAMESPACE
+
+# Common issues:
+# - HF_TOKEN not provided: Set HF_TOKEN parameter in make command
+# - Invalid token: Regenerate token at https://huggingface.co/settings/tokens
+# - License not accepted: Accept license at https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct
+```
+
+**Model Compatibility Validation Errors**:
+```bash
+# Error: "Nemotron model is not compatible with Llama Stack mode"
+# Solution: Use MODEL=llama with PROVIDER_MODE=llama_stack
+#       OR Use MODEL=nemotron with PROVIDER_MODE=mcp_direct
+
+# Error: "HF_TOKEN is required when MODEL=llama"
+# Solution: Provide your HuggingFace token in the make command
+#          HF_TOKEN=<your-token>
+```
+
 **GPU Scheduling Issues**:
-If pods fail to schedule due to GPU taints, verify the tolerations in `helm/nemotron-model/templates/inferenceservice.yaml`.
-These tolerations may be labeled differently across clusters.
+If pods fail to schedule due to GPU taints:
+```bash
+# Check node taints
+oc describe node <gpu-node-name> | grep Taints
+
+# Verify tolerations match in helm chart templates:
+# - helm/nemotron-model/templates/inferenceservice.yaml
+# - helm/llama-model/templates/inferenceservice.yaml
+```
 
 **MCP Connection Errors**:
 - Custom MCP Client mode: Check that `pg-airman-mcp` service uses streamable-http transport
@@ -315,10 +438,11 @@ These tolerations may be labeled differently across clusters.
 Verify vLLM has the required flags:
 ```bash
 oc logs <vllm-pod> | grep "enable-auto-tool-choice"
+oc logs <vllm-pod> | grep "tool-call-parser"
 ```
 
-**Model Not Found**:
-Ensure the model name includes the provider prefix for Llama Stack mode:
+**Model Not Found (Llama Stack mode)**:
+Ensure the model name includes the provider prefix:
 - Correct: `vllm-inference/redhataillama-31-8b-instruct`
 - Incorrect: `redhataillama-31-8b-instruct`
 
@@ -333,9 +457,9 @@ make uninstall NAMESPACE=$NAMESPACE
 CRITICAL: This will delete everything in the namespace and remove the namespace:
 - All application deployments (UI, backend, MCP server)
 - LlamaStackDistribution (if deployed)
-- Model deployments (if deployed with `DEPLOY_MODEL=true`)
+- Model deployments (Nemotron and/or Llama 3.1, if deployed with `DEPLOY_MODEL=true`)
 - Routes and services
-- Secrets and ConfigMaps
+- Secrets and ConfigMaps (including HuggingFace tokens)
 
 ## Tags
 
@@ -371,15 +495,27 @@ CRITICAL: This will delete everything in the namespace and remove the namespace:
 
 ### Model Requirements
 
-**Custom MCP client Mode**:
-- Nemotron models: Custom `<TOOLCALL>` tag format (auto-detected)
-- Llama 3.1 models: Standard OpenAI function calling (requires vLLM flags)
+This deployment supports two LLM models, each with different characteristics:
 
-**Llama Stack Mode**:
-- Requires models with standard OpenAI function calling support (Nemotron is not supported)
-- vLLM must be deployed with: `--enable-auto-tool-choice --tool-call-parser=llama3_json` (automatically set by this deployment)
-- You should also specify a --max-model-len=32768
-- Nemotron custom format is NOT compatible with Llama Stack agents
+**Nemotron Model** (nvidia/NVIDIA-Nemotron-Nano-9B-v2):
+- **Tool Calling Format**: Custom `<TOOLCALL>` tag format
+- **Authentication**: None required (publicly available on HuggingFace)
+- **Compatible Modes**: Custom MCP Client mode only
+- **vLLM Flags**: `--tool-call-parser mistral`
+- **Auto-Deployment**: `MODEL=nemotron DEPLOY_MODEL=true`
+
+**Llama 3.1 Model** (meta-llama/Llama-3.1-8B-Instruct):
+- **Tool Calling Format**: Standard OpenAI function calling
+- **Authentication**: HuggingFace token required (license agreement)
+- **Compatible Modes**: Both Custom MCP Client and Llama Stack modes
+- **vLLM Flags**: `--tool-call-parser llama3_json --enable-auto-tool-choice --max-model-len 32768`
+- **Auto-Deployment**: `MODEL=llama DEPLOY_MODEL=true HF_TOKEN=<your-token>`
+
+**Key Compatibility Notes**:
+- Llama Stack mode **requires** Llama 3.1 (or other OpenAI-compatible models)
+- Nemotron's custom format is **not compatible** with Llama Stack agents
+- The Makefile includes validation to prevent invalid model/mode combinations
+- Tool call format is auto-detected in Custom MCP Client mode
 
 ### Contributing
 

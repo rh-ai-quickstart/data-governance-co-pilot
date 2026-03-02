@@ -1,0 +1,28 @@
+NVIDIA Nemotron Nano 9B v2 model has been deployed!
+
+Model Name: {{ .Values.model.name }}
+Namespace: {{ .Release.Namespace }}
+Storage Type: {{ .Values.model.storage.type }}
+{{- if eq .Values.model.storage.type "uri" }}
+Storage URI: {{ .Values.model.storage.uri }}
+{{- end }}
+
+The model is being initialized from the OCI container image and may take 3-5 minutes to become ready.
+
+To check the status:
+  oc get inferenceservice {{ .Values.model.name }} -n {{ .Release.Namespace }}
+
+To get the model endpoint once ready:
+  oc get route {{ .Values.model.name }} -n {{ .Release.Namespace }} -o jsonpath='{.spec.host}'
+
+{{- if .Values.security.enableAuth }}
+
+Authentication is enabled. To get the service account token:
+  oc sa get-token default -n {{ .Release.Namespace }}
+{{- end }}
+
+To test the model endpoint:
+  curl -X POST https://$(oc get route {{ .Values.model.name }} -n {{ .Release.Namespace }} -o jsonpath='{.spec.host}')/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $(oc sa get-token default -n {{ .Release.Namespace }})" \
+    -d '{"model": "{{ .Values.model.name }}", "messages": [{"role": "user", "content": "Hello!"}]}'

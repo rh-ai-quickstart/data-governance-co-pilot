@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.model.name }}-view-role
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.model.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    opendatahub.io/dashboard: "true"
+rules:
+- apiGroups:
+  - serving.kserve.io
+  resourceNames:
+  - {{ .Values.model.name }}
+  resources:
+  - inferenceservices
+  verbs:
+  - get
