@@ -19,18 +19,22 @@ container:
       cpu: "100m"
       memory: "256Mi"
 
-# LLM Model configuration (aligned with nemotron-model or external deployment)
+# LLM Model configuration
+# NOTE: These values are populated at deployment time from copilot-backend/values.yaml
+# via the Makefile. The values here are just empty placeholders.
+#
+# Source of truth: helm/copilot-backend/values.yaml (llamaStack section)
+#
+# Deployment paths:
+# 1. DEPLOY_MODEL=true: Extracted from deployed model (InferenceService)
+# 2. DEPLOY_MODEL=false: Read from copilot-backend/values.yaml (llamaStack.baseUrl, llamaStack.model)
 model:
-  # Model name (e.g., nvidia-nemotron-nano-9b-v2)
-  # If DEPLOY_MODEL=true, this will be auto-populated
-  name: "redhataillama-31-8b-instruct"
-  # vLLM service URL
-  # Format: https://{model-name}-predictor.{namespace}.svc.cluster.local:8443/v1
-  # If DEPLOY_MODEL=true, this will be auto-generated
-  url: "https://redhataillama-31-8b-instruct-quickstarts-llm.apps.ai-dev02.kni.syseng.devcluster.openshift.com/v1"
-  # API key for vLLM service
-  # If DEPLOY_MODEL=true, this will be auto-extracted from service account secret
-  apiKey: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjdzMF9PR3FmdjlOUHduOGl6akxaNTVjbW1rd19lSnBiVzBEQ3Q1NGpKbUkifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJxdWlja3N0YXJ0cy1sbG0iLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlY3JldC5uYW1lIjoiZGVmYXVsdC1uYW1lLXJlZGhhdGFpbGxhbWEtMzEtOGItaW5zdHJ1Y3Qtc2EiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoicmVkaGF0YWlsbGFtYS0zMS04Yi1pbnN0cnVjdC1zYSIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6IjkzMjRjM2JkLTQ4ZjMtNDE0NS1iN2NlLWE5YTFmZDg5YWNjZiIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpxdWlja3N0YXJ0cy1sbG06cmVkaGF0YWlsbGFtYS0zMS04Yi1pbnN0cnVjdC1zYSJ9.VKXKcup-6xRrxzR4DP5fsWx1JSph-RjXRxB2h77wx9gGPERz2wnoGn0q2wi7qSuhuH25X6jLH5xQWF0TCFj8sFTj2xcX02YNsWO5QLhEPy23p-NEzrHdCXdLGXM0uGdKA_ZwLn0gwmui_Ey_K35VvTB8YyqiqpX3cEQLEEcq8jm3d0BpwtVyw5jtVMR5u9FlHRgXTq2lGEqWD2r9qQxxWED_dVO3BshveWUzZM1fp0CoDrcad8JLU5wknCFcE7FxlF5q8w-1WmO9W7b3lVrxaMpFF3gZipsQYXUk7xB0MXQZGUeJAzRDfZY452r-hixX7vKyefABA1w6xPiusUwKgS11m4zTcXeAuAweeoZWEl8f8wGOJEi360BWZ6mY37W4Qsj1nTtLuOefIaLrB2KIuqNW9QYJMKCGxesiiLW5ghsNrKEPqnj3juvWkzjHPFf-cisVqe71ZyQEEdlmR45AuOUnLQhqb9YcmiVT4XoK0SbU0soXs_QVEpAISKgRyBIyj-IBh_TCAjiWxzcJrXkJXC2Anc0o8UK59x5GYYU17Nbgz1b6c0XdAlpZB7zEc_0HQDowpR35xLrbeEM6kY2AkZ4x8VVkCxlCUOViXkUv0xavNRDN6H9dgMag1c7JsJ3q6qJbspH6H68lgoNPqdqVi_Y6fHc1xlGR7OW6zmgCOkU"
+  # Model name (populated via --set model.name=... from Makefile)
+  name: ""
+  # vLLM service URL (populated via --set model.url=... from Makefile)
+  url: ""
+  # API key for vLLM service (populated via --set model.apiKey=... from Makefile, or left empty)
+  apiKey: ""
 
 # MCP Server configuration
 mcp:

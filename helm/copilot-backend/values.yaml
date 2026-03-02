@@ -26,12 +26,9 @@ mcp:
 # LLM Configuration (MCP-Direct mode only)
 llm:
   # baseUrl: "https://nvidia-nemotron-nano-9b-v2-samouelian-mcp.apps.ai-dev01.kni.syseng.devcluster.openshift.com/v1"
-  # baseUrl: "https://redhataillama-31-8b-instruct-quickstarts-llm.apps.ai-dev02.kni.syseng.devcluster.openshift.com"
-  # baseUrl: "https://nvidia-nemotron-nano-9b-v2-data-governance-copilot.apps.4b3c5885-edbqs.openshiftpartnerlabs.com/v1"
   baseUrl: 	https://litellm-prod.apps.maas.redhatworkshops.io/v1
   model: qwen3-14b
   # model: "nvidia-nemotron-nano-9b-v2"
-  # model: "redhataillama-31-8b-instruct"
   # API key for LLM service
   # IMPORTANT: Do not commit API keys to Git!
   # Pass via: make copilot-backend-install copilot.llmApiKey=your-key
@@ -70,7 +67,7 @@ livenessProbe:
   initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 10  # Increased from 5s to handle busy server during long LLM queries
-  failureThreshold: 6  # Increased from 3 to allow up to 60s of health check failures before restart
+  failureThreshold: 30  # Increased to allow up to 5 minutes (300s) of health check failures before restart
 
 readinessProbe:
   httpGet:
@@ -79,4 +76,4 @@ readinessProbe:
   initialDelaySeconds: 10
   periodSeconds: 5
   timeoutSeconds: 10  # Increased from 5s to handle busy server during long LLM queries
-  failureThreshold: 6  # Increased from 3 to be more tolerant of temporary slowdowns
+  failureThreshold: 60  # Increased to allow up to 5 minutes (300s) of health check failures before marking not ready

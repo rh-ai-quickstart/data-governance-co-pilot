@@ -6,12 +6,12 @@ Empower data analysts using AI-driven natural language queries integrated with t
 
 The Data Governance Co-Pilot enables analysts to interact with their databases using natural language while maintaining  governance controls. Instead of writing complex SQL queries, users can ask questions like "Show me all tables containing customer PII" or "What are the retention policies for user data?" and receive accurate, policy-compliant responses.
 
-This quickstart demonstrates how to build an agentic AI application that combines Large Language Model (LLM) inference with database tools through the Model Context Protocol (MCP). The application supports two deployment architectures:
+This quickstart demonstrates how to build an agentic AI application that combines Large Language Model (LLM) inference with pg-airman-mcp, EnterpriseDB's Model Context Protocol (MCP) server for Postgres. The application supports two deployment architectures:
 
 - **Custom MCP Client Mode**: Backend manages the agentic loop with direct vLLM inference and MCP tool execution
 - **Llama Stack Mode**: Leverages OpenShift AI's Llama Stack operator for agent orchestration with integrated MCP tools
 
-Both modes provide the same user experience through a modern web interface with real-time streaming, reasoning transparency, and conversation management. The flexible architecture allows organizations to choose the deployment mode that best fits their infrastructure and operational requirements.
+Both modes provide a similar user experience through a modern web interface with real-time streaming and conversation management. The flexible architecture allows organizations to choose the deployment mode that best fits their infrastructure and operational requirements.
 
 ### Key Capabilities
 
@@ -19,7 +19,7 @@ Both modes provide the same user experience through a modern web interface with 
 - **Governance-Aware Responses**: Built-in awareness of data classification, retention policies, and access controls
 - **Real-Time Streaming**: Watch the AI agent's reasoning process as it explores the database and formulates answers (the Llama Stack deployment route may provide limited reasoning output)
 - **Tool Calling via MCP**: Database operations executed through the Model Context Protocol for secure, structured interactions
-- **Multi-Model Support**: Works with Nemotron (custom tool calling format) and Llama 3.1 (OpenAI function calling) models
+- **Multi-Model Support**: Works with Nemotron (custom tool calling format) and Qwen3-14-B (using OpenAI function calling) models
 - **Dual Architecture**: Choose between backend-managed or Llama Stack-managed agentic orchestration
 
 ## Architecture
@@ -87,7 +87,6 @@ The Data Governance Co-Pilot consists of three main components:
                 │
                 ▼
         ┌──────────────────┐
-        │  EDB Postgre AI  │
         │    PostgreSQL    │
         │     Database     │
         └──────────────────┘
@@ -130,8 +129,8 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
   - Custom MCP Client: vLLM (supports Nemotron, Llama 3.1)
   - Llama Stack: OpenShift AI Llama Stack Operator
 - **Tool Runtime**: Model Context Protocol (MCP) server for PostgreSQL (pg-airman-mcp)
-- **Database**: PostgreSQL (EDB Postgres AI database)
-- **Platform**: OpenShift Container Platform 4.x
+- **Database**: PostgreSQL Database
+- **Platform**: OpenShift Container Platform 4.20.14
 
 ## Requirements
 
@@ -146,7 +145,7 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
 
 ### Minimum Software Requirements
 
-- **OpenShift Container Platform**: Version 4.14 or higher
+- **OpenShift Container Platform**: Version 4.20.14 or higher with llama stack preview enabled
 - **NVIDIA GPU Operator**: For GPU support on OpenShift
 - **Helm**: Version 3.8 or higher
 - **oc CLI**: OpenShift command-line tool (matching cluster version)
@@ -156,7 +155,7 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
 
 ### Optional Requirements (Llama Stack Mode)
 
-- **OpenShift AI**: Version 3.2 or higher
+- **OpenShift AI**: Version 3.2 
 - **Llama Stack Operator**: Included with OpenShift AI 3.2+
 
 ## Deploy
