@@ -607,12 +607,18 @@ copilot-backend-uninstall:
 .PHONY: copilot-llama-stack-install
 copilot-llama-stack-install: check-model-provider-compatibility
 ifeq ($(PROVIDER_MODE),llama_stack)
+	@echo "DEBUG: DEPLOY_MODEL=$(DEPLOY_MODEL), MODEL=$(MODEL)"
 ifeq ($(DEPLOY_MODEL),true)
 	@echo "DEPLOY_MODEL=true: Waiting for $(MODEL) model to be ready before configuring Llama Stack..."
 ifeq ($(MODEL),qwen3)
 	@$(MAKE) qwen3-model-wait NAMESPACE=$(NAMESPACE)
 	@echo "Extracting qwen3 model configuration for Llama Stack..."
 	@MODEL_NAME=$$(oc get inferenceservice -n $(NAMESPACE) -l release=qwen3-model -o jsonpath='{.items[0].metadata.name}'); \
+	if [ -z "$$MODEL_NAME" ]; then \
+		echo "ERROR: No InferenceService found with label release=qwen3-model in namespace $(NAMESPACE)"; \
+		echo "Cannot extract model configuration. Please ensure DEPLOY_MODEL=true actually deployed the model."; \
+		exit 1; \
+	fi; \
 	MODEL_URL="https://$$(oc get route $$MODEL_NAME -o jsonpath='{.spec.host}' -n $(NAMESPACE))/v1"; \
 	MODEL_API_KEY=$$(oc get secret default-name-$$MODEL_NAME-sa -n $(NAMESPACE) -o jsonpath='{.data.token}' | base64 -d); \
 	echo "Model name: $$MODEL_NAME"; \
@@ -633,10 +639,25 @@ else
 endif
 else
 	@echo "Installing Llama Stack with external model endpoint..."
-	@LLAMA_STACK_BASE_URL=$$(if $(copilot.llmBaseUrl),echo $(copilot.llmBaseUrl),yq e '.llamaStack.baseUrl' $(COPILOT_BACKEND_CHART)/values.yaml); \
-	LLAMA_STACK_MODEL=$$(if $(copilot.llmModel),echo $(copilot.llmModel),yq e '.llamaStack.model' $(COPILOT_BACKEND_CHART)/values.yaml); \
+	@LLAMA_STACK_BASE_URL="$(copilot.llmBaseUrl)"; \
+	if [ -z "$$LLAMA_STACK_BASE_URL" ]; then \
+		LLAMA_STACK_BASE_URL=$$(yq e '.llamaStack.baseUrl' $(COPILOT_BACKEND_CHART)/values.yaml); \
+	fi; \
+	LLAMA_STACK_MODEL="$(copilot.llmModel)"; \
+	if [ -z "$$LLAMA_STACK_MODEL" ]; then \
+		LLAMA_STACK_MODEL=$$(yq e '.llamaStack.model' $(COPILOT_BACKEND_CHART)/values.yaml); \
+	fi; \
+	LLAMA_STACK_API_KEY="$(copilot.llmApiKey)"; \
 	echo "Using baseUrl: $$LLAMA_STACK_BASE_URL"; \
 	echo "Using model: $$LLAMA_STACK_MODEL"; \
+	echo "Using API key: $${LLAMA_STACK_API_KEY:+[provided]}$${LLAMA_STACK_API_KEY:-[not provided]}"; \
+	if [ -z "$$LLAMA_STACK_BASE_URL" ] || [ -z "$$LLAMA_STACK_MODEL" ]; then \
+		echo "ERROR: Missing required configuration for external model:"; \
+		echo "  baseUrl: $$LLAMA_STACK_BASE_URL"; \
+		echo "  model: $$LLAMA_STACK_MODEL"; \
+		echo "Please set copilot.llmBaseUrl and copilot.llmModel, or configure them in copilot-backend/values.yaml"; \
+		exit 1; \
+	fi; \
 	helm -n $(NAMESPACE) upgrade --install $(LLAMA_STACK_DISTRIBUTION_NAME) $(COPILOT_LLAMA_STACK_CHART) \
 		--set distribution.name=$(LLAMA_STACK_DISTRIBUTION_NAME) \
 		--set container.port=$(LLAMA_STACK_SERVICE_PORT) \

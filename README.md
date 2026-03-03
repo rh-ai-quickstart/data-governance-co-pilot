@@ -173,23 +173,34 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
    cd data-governance-co-pilot
    ```
 
-3a. **Full Installation (with Llama Stack backend + Llama 3.1 model)**:
+3a. **Full Installation (with Llama Stack backend + Qwen3 model)**:
    ```bash
    make install NAMESPACE=your-namespace \
-     PROVIDER_MODE=llama_stack \
      DEPLOY_MODEL=true \
-     MODEL=llama \
-     HF_TOKEN=your-huggingface-token \
+     MODEL=qwen3 PROVIDER_MODE=llama_stack \
+     postgres.userId=postgres \
+     postgres.password=postgres \
+     postgres.databaseName=postgres
+   ```
+
+3b. **Same as 3a above except without the model**:
+
+NOTE: In this mode, you must deploy a Qwen3-14B model and provide it's endpoint URL and model resource name
+in the copilot-backend/values.yaml file. Provide the apikey when invoking the make command as shown below. Also, take
+note of required configuration parameters for your existing model (see qwen3-model helm chart in this project).
+
+   ```bash
+   make install NAMESPACE=your-namespace \
+     DEPLOY_MODEL=false \
+     MODEL=qwen3 \
+     PROVIDER_MODE=llama_stack \
      postgres.userId=postgres \
      postgres.password=postgres \
      postgres.databaseName=postgres \
-     minio.userId=minio \
-     minio.password=minio1234! \
-     pgadmin.email=yourname@redhat.com \
-     pgadmin.password=postgres
+     copilot.llmApiKey=yourapikey
    ```
 
-3b. **Full Installation (with MCP Direct backend + Nemotron model)**:
+3c. **Full Installation (with MCP Direct backend + Nemotron model)**:
    ```bash
    make install NAMESPACE=your-namespace \
      PROVIDER_MODE=mcp_direct \
@@ -198,36 +209,24 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
      postgres.userId=postgres \
      postgres.password=postgres \
      postgres.databaseName=postgres \
-     minio.userId=minio \
-     minio.password=minio1234! \
-     pgadmin.email=yourname@redhat.com \
-     pgadmin.password=postgres
    ```
 
-3c. **Full Installation (with MCP Direct backend + Llama 3.1 model)**:
+3c. **Same as 3c above exception without the model**:
+
+NOTE: In this mode, you must deploy a Nemotron Nano 9b model and provide it's endpoint URL and model resource name
+in the copilot-backend/values.yaml file. Provide the apikey when invoking the make command as shown below. Also, take
+note of required configuration parameters for your existing model (see nemotron-model helm chart in this project).
+
    ```bash
    make install NAMESPACE=your-namespace \
+     DEPLOY_MODEL=false \
+     MODEL=nemotron \
      PROVIDER_MODE=mcp_direct \
-     DEPLOY_MODEL=true \
-     MODEL=llama \
-     HF_TOKEN=your-huggingface-token \
      postgres.userId=postgres \
      postgres.password=postgres \
      postgres.databaseName=postgres \
-     minio.userId=minio \
-     minio.password=minio1234! \
-     pgadmin.email=yourname@redhat.com \
-     pgadmin.password=postgres
+     copilot.llmApiKey=yourapikey
    ```
-
-**HuggingFace Token Setup (Required for Llama models)**:
-
-When deploying Llama 3.1 model (`MODEL=llama`), you must provide a HuggingFace token:
-
-1. Create account at https://huggingface.co
-2. Accept the Llama 3.1 license at https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct
-3. Generate access token at https://huggingface.co/settings/tokens
-4. Use the token in the `HF_TOKEN` parameter
 
 **Using Existing Models**:
 
