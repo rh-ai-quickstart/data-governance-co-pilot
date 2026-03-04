@@ -4,14 +4,30 @@ Empower data analysts using AI-driven natural language queries integrated with t
 
 ## Description
 
-The Data Governance Co-Pilot enables analysts to interact with their databases using natural language while maintaining  governance controls. Instead of writing complex SQL queries, users can ask questions like "Show me all tables containing customer PII" or "What are the retention policies for user data?" and receive accurate, policy-compliant responses.
+This quickstart demonstrates how to build an **agentic AI application** that bridges Large Language Models (LLMs) with your enterprise data. By utilizing **EnterpriseDB’s (EDB) pg-airman-mcp**, an open-source Model Context Protocol (MCP) server for Postgres, your agent can securely query and interact with relational databases in real time.
 
-This quickstart demonstrates how to build an agentic AI application that combines Large Language Model (LLM) inference with pg-airman-mcp, EnterpriseDB's Model Context Protocol (MCP) server for Postgres. The application supports two deployment architectures:
+## Deployment Architectures
 
-- **Custom MCP Client Mode**: Backend manages the agentic loop with direct vLLM inference and MCP tool execution
-- **Llama Stack Mode**: Leverages OpenShift AI's Llama Stack operator for agent orchestration with integrated MCP tools
+The application supports two distinct deployment modes to suit your orchestration needs:
 
-Both modes provide a similar user experience through a modern web interface with real-time streaming and conversation management. The flexible architecture allows organizations to choose the deployment mode that best fits their infrastructure and operational requirements.
+* **Custom MCP Client Mode**: A "hands-on" approach where the backend manages the agentic loop directly. It interfaces between **OpenShift AI’s** inference server and the MCP server for granular control and specialized orchestration logic.
+* **Llama Stack Mode**: A streamlined approach leveraging the **OpenShift AI Llama Stack operator**. This offloads agent orchestration and tool integration to a standardized, emerging framework.
+
+## The "Dual-Path" Advantage
+
+Choosing a two-mode solution provides a **strategic bridge** between current stability and future innovation. This architecture offers:
+
+1.  **Future-Proofing**: It keeps the path open for continued integration with the emerging **Llama Stack** orchestration framework as it matures.
+2.  **Risk Mitigation**: It protects your solution from the "API churn" associated with rapidly changing experimental frameworks.
+3.  **Custom Flexibility**: It allows you to implement custom logic for complex orchestration requirements that standardized frameworks may not yet support.
+
+## Data Sovereignty & Security
+
+Both modes ensure your organization maintains full sovereignty over its AI stack. By combining **Red Hat OpenShift** and **OpenShift AI**, you retain complete control over:
+
+* **The LLM Model**: Run private models without external API calls or third-party data exposure.
+* **Inference & Compute**: Keep sensitive data processing within your own managed cluster.
+* **Relational Assets**: Leverage your existing investment in Postgres while extending its utility into AI workflows without compromising security.
 
 ### Key Capabilities
 
@@ -53,8 +69,8 @@ The Data Governance Co-Pilot consists of three main components:
 │  └────────────┬─────────────┬───────────────────────────┘   │
 │               │             │                               │
 │   ┌───────────▼──────┐  ┌──▼─────────────────┐              │
-│   │ Custom MCP Client       │  │ Llama Stack │              │
-│   │ Provider         │  │ Provider           │              │
+│   │ Custom MCP Client|  |     Llama Stack    │              │
+│   │ Provider         │  │      Provider      │              │
 │   │                  │  │                    │              │
 │   │ • OpenAI Client  │  │ • Llama Stack      │              │
 │   │ • MCP Client     │  │   Client           │              │
@@ -67,9 +83,9 @@ The Data Governance Co-Pilot consists of three main components:
            │                   │
            ▼                   ▼
 ┌──────────────────┐   ┌──────────────────┐
-│ vLLM Models:     │   │  Llama Stack     │
+│ LLM Models:      │   │  Llama Stack     │
 │ • Nemotron       │   │  (OpenShift AI)  │
-│ • Llama 3.1      │   │  • Agents API    │
+│ • Qwen3-14B      │   │  • Agents API    │
 │                  │   │  • Tool Runtime  │
 └──────┬───────────┘   └────┬─────────────┘
        │                    │
@@ -126,7 +142,7 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
 - **Frontend**: Svelte 5, TypeScript, TailwindCSS, Server-Sent Events (SSE)
 - **Backend**: Python 3.12, FastAPI, OpenAI Python SDK, MCP SDK
 - **LLM Inference**:
-  - Custom MCP Client: vLLM (supports Nemotron, Llama 3.1)
+  - Custom MCP Client: vLLM (supports Nemotron (MCP Direct Mode), Qwen3 (Llama Stack Mode))
   - Llama Stack: OpenShift AI Llama Stack Operator
 - **Tool Runtime**: Model Context Protocol (MCP) server for PostgreSQL (pg-airman-mcp)
 - **Database**: PostgreSQL Database
@@ -153,7 +169,7 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
   - Can be deployed as part of this quickstart or use existing instance
   - Database credentials required for deployment
 
-### Optional Requirements (Llama Stack Mode)
+### Requirements (Llama Stack Mode)
 
 - **OpenShift AI**: Version 3.2 
 - **Llama Stack Operator**: Included with OpenShift AI 3.2+
@@ -214,14 +230,10 @@ in the copilot-backend/values.yaml file. Provide the apikey when invoking the ma
 note of required configuration parameters for your existing model (see qwen3-model helm chart in this project).
 
    ```bash
-   make install NAMESPACE=your-namespace \
-     DEPLOY_MODEL=false \
-     MODEL=qwen3 \
-     PROVIDER_MODE=llama_stack \
-     postgres.userId=postgres \
-     postgres.password=postgres \
-     postgres.databaseName=postgres \
-     copilot.llmApiKey=yourapikey
+   make install NAMESPACE=samouelian-dev DEPLOY_MODEL=false MODEL=qwen3 \
+   PROVIDER_MODE=llama_stack postgres.userId=postgres \
+   postgres.password=postgres postgres.databaseName=postgres \
+   llm.apiKey=xyz llm.baseUrl=https://xyz.io/v1 llm.model=qwen3-14b
    ```
 
 5c. **Full Installation (with MCP Direct backend + Nemotron model)**:
@@ -242,15 +254,16 @@ in the copilot-backend/values.yaml file. Provide the apikey when invoking the ma
 note of required configuration parameters for your existing model (see nemotron-model helm chart in this project).
 
    ```bash
-   make install NAMESPACE=your-namespace \
-     DEPLOY_MODEL=false \
-     MODEL=nemotron \
-     PROVIDER_MODE=mcp_direct \
-     postgres.userId=postgres \
-     postgres.password=postgres \
-     postgres.databaseName=postgres \
-     copilot.llmApiKey=yourapikey
+   make install NAMESPACE=samouelian-dev DEPLOY_MODEL=false MODEL=nemotron \
+   PROVIDER_MODE=mcp_direct postgres.userId=postgres \
+   postgres.password=postgres postgres.databaseName=postgres \
+   llm.apiKey=xyz llm.baseUrl=https://xyz.io/v1 llm.model=your-model-resource-name
    ```
+
+NOTE: There are two model parameters above. The first (MODEL=nemotron) serves as a logical identifier
+that indicates which of the two models your deployment should use ('qwen3' or 'nemotron'). One of these two values
+must be provided exactly as shown. The second parameter (llm.model=your-model-resource-name) is the deployed resource name
+of your model (e.g., nvidia-nemotron-nano-9b-v2). This value should represent whatever you've chosen for your model deployment. If DEPLOY_MODEL=true, this value is set automatically.
 
 ### Post Deployment
 
@@ -281,10 +294,7 @@ DEPLOY_MODEL=true               # Options: true (auto-deploy), false (use existi
 # Model deployment options (when DEPLOY_MODEL=false)
 llm.model=<model-name>          # Model identifier for Custom MCP Client mode
 llm.baseUrl=<vllm-url>          # External vLLM endpoint for Custom MCP Client mode
-copilot.llmApiKey=<api-key>     # API key for external vLLM
-
-# Llama Stack configuration (Llama Stack mode only)
-llamaStack.model=<model-id>     # Model ID in vllm-inference/<name> format
+llm.apiKey=<api-key>     # API key for external vLLM
 
 # Database credentials
 postgres.userId=<username>
@@ -319,9 +329,9 @@ make uninstall NAMESPACE=$NAMESPACE
 CRITICAL: This will delete everything in the namespace and remove the namespace:
 - All application deployments (UI, backend, MCP server)
 - LlamaStackDistribution (if deployed)
-- Model deployments (Nemotron and/or Llama 3.1, if deployed with `DEPLOY_MODEL=true`)
+- Model deployments (nemotron or qwen3, if deployed with `DEPLOY_MODEL=true`)
 - Routes and services
-- Secrets and ConfigMaps (including HuggingFace tokens)
+- Secrets and ConfigMaps
 
 ## Tags
 
@@ -359,23 +369,20 @@ CRITICAL: This will delete everything in the namespace and remove the namespace:
 
 This deployment supports two LLM models, each with different characteristics:
 
-**Nemotron Model** (nvidia/NVIDIA-Nemotron-Nano-9B-v2):
+**Nemotron Model** (hf://nvidia/NVIDIA-Nemotron-Nano-9B-v2):
 - **Tool Calling Format**: Custom `<TOOLCALL>` tag format
 - **Authentication**: None required (publicly available on HuggingFace)
 - **Compatible Modes**: Custom MCP Client mode only
-- **vLLM Flags**: `--tool-call-parser mistral`
-- **Auto-Deployment**: `MODEL=nemotron DEPLOY_MODEL=true`
+- **vLLM Flags**: See nemotron helm chart in this project
 
-**Llama 3.1 Model** (meta-llama/Llama-3.1-8B-Instruct):
+**Qwen3 Model** (hf://Qwen/Qwen3-14B-AWQ):
 - **Tool Calling Format**: Standard OpenAI function calling
-- **Authentication**: HuggingFace token required (license agreement)
 - **Compatible Modes**: Both Custom MCP Client and Llama Stack modes
-- **vLLM Flags**: `--tool-call-parser llama3_json --enable-auto-tool-choice --max-model-len 32768`
-- **Auto-Deployment**: `MODEL=llama DEPLOY_MODEL=true HF_TOKEN=<your-token>`
+- **vLLM Flags**: See qwen3 helm chart in this project
 
 **Key Compatibility Notes**:
-- Llama Stack mode **requires** Llama 3.1 (or other OpenAI-compatible models)
-- Nemotron's custom format is **not compatible** with Llama Stack agents
+- Llama Stack mode tested using
+- Nemotron's tool calling format is not tested with Llama Stack agent
 - The Makefile includes validation to prevent invalid model/mode combinations
 - Tool call format is auto-detected in Custom MCP Client mode
 
