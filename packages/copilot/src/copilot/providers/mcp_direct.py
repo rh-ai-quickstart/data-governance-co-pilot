@@ -490,14 +490,32 @@ class MCPDirectProvider(LLMProvider):
                     inside_think_tag = False
                     content_buffer = ""
 
+                    # Accumulate OpenAI-format tool calls from streaming delta
+                    # Tool calls are streamed incrementally by index, need to accumulate arguments
+                    accumulated_tool_calls = {}
+
                     async for chunk in stream:
                         delta = chunk.choices[0].delta
 
-                        # Process OpenAI-format tool calls (Llama 3.1 style)
+                        # Process OpenAI-format tool calls (Llama 3.1, Qwen3 style)
                         if self.tool_call_format == "openai" and hasattr(delta, 'tool_calls') and delta.tool_calls:
-                            # Tool calls in delta - accumulate them
-                            # Note: This is simplified - production code would need to handle streaming tool calls
+                            # Tool calls in delta - accumulate by index
                             logger.debug(f"Received tool_calls in delta: {delta.tool_calls}")
+                            for tc in delta.tool_calls:
+                                index = tc.index
+                                if index not in accumulated_tool_calls:
+                                    # Initialize new tool call
+                                    accumulated_tool_calls[index] = {
+                                        "id": tc.id,
+                                        "type": tc.type,
+                                        "function": {
+                                            "name": tc.function.name if tc.function.name else "",
+                                            "arguments": ""
+                                        }
+                                    }
+                                # Accumulate arguments (streamed incrementally)
+                                if tc.function.arguments:
+                                    accumulated_tool_calls[index]["function"]["arguments"] += tc.function.arguments
 
                         # Process content
                         if delta.content:
@@ -653,9 +671,15 @@ class MCPDirectProvider(LLMProvider):
                     if self.tool_call_format == "nemotron":
                         parsed_tool_calls = self._parse_nemotron_tool_calls(accumulated_content)
                     else:
-                        # OpenAI format - tool calls would be in chunk (not implemented in streaming accumulator above)
-                        # For now, just check accumulated content
-                        parsed_tool_calls = []
+                        # OpenAI format - use accumulated tool calls from streaming delta
+                        # Convert dict to list, sorted by index to maintain order
+                        parsed_tool_calls = [
+                            accumulated_tool_calls[idx]
+                            for idx in sorted(accumulated_tool_calls.keys())
+                        ] if accumulated_tool_calls else []
+                        logger.debug(f"Accumulated {len(parsed_tool_calls)} tool calls from OpenAI format stream")
+                        if parsed_tool_calls:
+                            logger.debug(f"Tool calls: {parsed_tool_calls}")
 
                     cleaned_content = self._clean_response_text(accumulated_content) if accumulated_content else None
 
