@@ -14,7 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Only ignore lib/ in packages directory (Python build artifacts), not UI components
+packages/*/lib/
 lib64/
 parts/
 sdist/

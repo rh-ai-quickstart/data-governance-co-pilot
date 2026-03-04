@@ -46,10 +46,10 @@ MODEL ?= qwen3
 # Model options:
 # - nemotron: NVIDIA Nemotron Nano 9B v2 (MCP-Direct mode only, custom tool calling)
 #   * DEPLOY_MODEL=true: Deploy to cluster via KServe
-#   * DEPLOY_MODEL=false: Use external endpoint (copilot.llmBaseUrl, copilot.llmModel, copilot.llmApiKey required)
+#   * DEPLOY_MODEL=false: Use external endpoint (llm.baseUrl, llm.model, llm.apiKey can be overridden)
 # - qwen3: Qwen3-14B (Both modes supported, OpenAI function calling)
 #   * DEPLOY_MODEL=true: Deploy to cluster via KServe (pulls from HuggingFace)
-#   * DEPLOY_MODEL=false: Use external endpoint (copilot.llmBaseUrl/llamaStack.baseUrl required)
+#   * DEPLOY_MODEL=false: Use external endpoint (llm.baseUrl can be overridden)
 
 # Provider mode for copilot backend (default: mcp_direct)
 # Options: mcp_direct, llama_stack
@@ -69,7 +69,7 @@ help:
 	@echo "                  If DEPLOY_MINIO=true: minio.userId, minio.password are required"
 	@echo "                  If DEPLOY_PGADMIN=true: pgadmin.email, pgadmin.password are required"
 	@echo "                  Example (Nemotron): make install NAMESPACE=myns MODEL=nemotron DEPLOY_MODEL=true PROVIDER_MODE=mcp_direct ..."
-	@echo "                  Example (Qwen3): make install NAMESPACE=myns MODEL=qwen3 PROVIDER_MODE=llama_stack copilot.llmApiKey=sk-xxx ..."
+	@echo "                  Example (Qwen3): make install NAMESPACE=myns MODEL=qwen3 PROVIDER_MODE=llama_stack llm.apiKey=sk-xxx ..."
 	@echo "  pg-airman-mcp-install - Installs pg-airman-mcp MCP server (builds custom image with libpq5 fix)"
 	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName"
 	@echo "                  Optional: pgairman.accessMode (default: restricted)"
@@ -87,7 +87,7 @@ help:
 	@echo "  copilot-backend-install - Installs copilot backend service (FastAPI orchestration layer)"
 	@echo "                  Required: NAMESPACE"
 	@echo "                  Optional: DEPLOY_MODEL=true (auto-extracts llmBaseUrl, llmModel, and llmApiKey from deployed model)"
-	@echo "                  If DEPLOY_MODEL=false: copilot.llmBaseUrl, copilot.llmModel, copilot.llmApiKey are required"
+	@echo "                  If DEPLOY_MODEL=false: llm.baseUrl, llm.model, llm.apiKey can be overridden (defaults from values.yaml)"
 	@echo "                  Example: make copilot-backend-install NAMESPACE=myns DEPLOY_MODEL=true"
 	@echo "                  Note: First run builds custom image (3-5 minutes), subsequent runs are faster"
 	@echo "  copilot-ui-install - Installs copilot frontend (Svelte UI)"
@@ -117,10 +117,10 @@ help:
 	@echo "  pgadmin.email            - pgAdmin login email (required if DEPLOY_PGADMIN=true)"
 	@echo "  pgadmin.password         - pgAdmin login password (required if DEPLOY_PGADMIN=true)"
 	@echo "  pgairman.accessMode      - MCP access mode: restricted or unrestricted (default: restricted)"
-	@echo "  copilot.llmApiKey        - LLM API key (required if DEPLOY_MODEL=false, auto-extracted if true)"
-	@echo "  copilot.llmBaseUrl       - LLM base URL (required if DEPLOY_MODEL=false, auto-extracted if true)"
-	@echo "  copilot.llmModel         - LLM model name (required if DEPLOY_MODEL=false, auto-extracted if true)"
-	@echo "  copilot.maxContextLength - LLM max context length in tokens (default: 8096)"
+	@echo "  llm.apiKey               - LLM API key (defaults from values.yaml, auto-extracted if DEPLOY_MODEL=true)"
+	@echo "  llm.baseUrl              - LLM base URL (defaults from values.yaml, auto-extracted if DEPLOY_MODEL=true)"
+	@echo "  llm.model                - LLM model name (defaults from values.yaml, auto-extracted if DEPLOY_MODEL=true)"
+	@echo "  llm.maxContextLength - LLM max context length in tokens (default: 8096)"
 
 # Older version of oc will raise error processing some of the commands in this make file; enforce a minimum version
 .PHONY: check-oc-version
@@ -180,9 +180,9 @@ check-pgadmin-credentials:
 # Validation for LLM API key
 .PHONY: check-llm-api-key
 check-llm-api-key:
-	@if [ -z "$(copilot.llmApiKey)" ]; then \
-		echo "Error: copilot.llmApiKey must be set."; \
-		echo "Usage: make copilot-backend-install NAMESPACE=... copilot.llmApiKey=your-key"; \
+	@if [ -z "$(llm.apiKey)" ]; then \
+		echo "Error: llm.apiKey must be set."; \
+		echo "Usage: make copilot-backend-install NAMESPACE=... llm.apiKey=your-key"; \
 		echo "Note: Use 'not-needed' for vLLM servers without authentication"; \
 		exit 1; \
 	fi
@@ -243,14 +243,14 @@ else
 endif
 	@$(MAKE) pg-airman-mcp-install NAMESPACE=$(NAMESPACE)
 	@$(MAKE) copilot-llama-stack-install NAMESPACE=$(NAMESPACE) PROVIDER_MODE=$(PROVIDER_MODE) DEPLOY_MODEL=$(DEPLOY_MODEL) \
-		$(if $(copilot.llmModel),copilot.llmModel=$(copilot.llmModel),) \
-		$(if $(copilot.llmBaseUrl),copilot.llmBaseUrl=$(copilot.llmBaseUrl),) \
-		$(if $(copilot.llmApiKey),copilot.llmApiKey=$(copilot.llmApiKey),)
+		$(if $(llm.model),llm.model=$(llm.model),) \
+		$(if $(llm.baseUrl),llm.baseUrl=$(llm.baseUrl),) \
+		$(if $(llm.apiKey),llm.apiKey=$(llm.apiKey),)
 	@$(MAKE) copilot-backend-install NAMESPACE=$(NAMESPACE) DEPLOY_MODEL=$(DEPLOY_MODEL) \
 		$(if $(model.storage.s3Bucket),model.storage.s3Bucket=$(model.storage.s3Bucket),) \
-		$(if $(copilot.llmBaseUrl),copilot.llmBaseUrl=$(copilot.llmBaseUrl),) \
-		$(if $(copilot.llmModel),copilot.llmModel=$(copilot.llmModel),) \
-		$(if $(copilot.llmApiKey),copilot.llmApiKey=$(copilot.llmApiKey),)
+		$(if $(llm.baseUrl),llm.baseUrl=$(llm.baseUrl),) \
+		$(if $(llm.model),llm.model=$(llm.model),) \
+		$(if $(llm.apiKey),llm.apiKey=$(llm.apiKey),)
 	@$(MAKE) copilot-ui-install NAMESPACE=$(NAMESPACE)
 
 .PHONY: minio-install
@@ -523,7 +523,7 @@ ifeq ($(MODEL),nemotron)
 			--set llm.baseUrl=$$MODEL_URL \
 			--set llm.model=$$MODEL_NAME \
 			--set llm.apiKey=$$MODEL_API_KEY \
-			$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
+			$(if $(llm.maxContextLength),--set llm.maxContextLength=$(llm.maxContextLength),) \
 			--timeout 5m; \
 	fi
 else ifeq ($(MODEL),qwen3)
@@ -544,10 +544,10 @@ else ifeq ($(MODEL),qwen3)
 			--set image.pullPolicy=Always \
 			--set provider.mode=$(PROVIDER_MODE) \
 			--set llamaStack.baseUrl=$$LLAMA_STACK_URL \
-			--set llamaStack.vllmBaseUrl=$$MODEL_URL \
-			--set llamaStack.vllmModel=$$MODEL_NAME \
-			--set llamaStack.vllmApiKey=$$MODEL_API_KEY \
-			$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
+			--set llm.baseUrl=$$MODEL_URL \
+			--set llm.model=$$MODEL_NAME \
+			--set llm.apiKey=$$MODEL_API_KEY \
+			$(if $(llm.maxContextLength),--set llm.maxContextLength=$(llm.maxContextLength),) \
 			--timeout 5m; \
 	else \
 		echo "Installing copilot-backend in mcp_direct mode with qwen3 model settings..."; \
@@ -559,7 +559,7 @@ else ifeq ($(MODEL),qwen3)
 			--set llm.baseUrl=$$MODEL_URL \
 			--set llm.model=$$MODEL_NAME \
 			--set llm.apiKey=$$MODEL_API_KEY \
-			$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
+			$(if $(llm.maxContextLength),--set llm.maxContextLength=$(llm.maxContextLength),) \
 			--timeout 5m; \
 	fi
 endif
@@ -575,7 +575,10 @@ else
 			--set image.pullPolicy=Always \
 			--set provider.mode=$(PROVIDER_MODE) \
 			--set llamaStack.baseUrl=$$LLAMA_STACK_URL \
-			$(if $(copilot.llamaStackModel),--set llamaStack.model=$(copilot.llamaStackModel),) \
+			$(if $(llm.baseUrl),--set llm.baseUrl=$(llm.baseUrl),) \
+			$(if $(llm.model),--set llm.model=$(llm.model),) \
+			$(if $(llm.apiKey),--set llm.apiKey=$(llm.apiKey),) \
+			$(if $(llm.maxContextLength),--set llm.maxContextLength=$(llm.maxContextLength),) \
 			--timeout 5m; \
 	else \
 		echo "Installing copilot-backend in mcp_direct mode..."; \
@@ -584,10 +587,10 @@ else
 			--set image.tag=latest \
 			--set image.pullPolicy=Always \
 			--set provider.mode=$(PROVIDER_MODE) \
-			$(if $(copilot.llmBaseUrl),--set llm.baseUrl=$(copilot.llmBaseUrl),) \
-			$(if $(copilot.llmModel),--set llm.model=$(copilot.llmModel),) \
-			$(if $(copilot.llmApiKey),--set llm.apiKey=$(copilot.llmApiKey),) \
-			$(if $(copilot.maxContextLength),--set llm.maxContextLength=$(copilot.maxContextLength),) \
+			$(if $(llm.baseUrl),--set llm.baseUrl=$(llm.baseUrl),) \
+			$(if $(llm.model),--set llm.model=$(llm.model),) \
+			$(if $(llm.apiKey),--set llm.apiKey=$(llm.apiKey),) \
+			$(if $(llm.maxContextLength),--set llm.maxContextLength=$(llm.maxContextLength),) \
 			--timeout 5m; \
 	fi
 endif
@@ -639,15 +642,15 @@ else
 endif
 else
 	@echo "Installing Llama Stack with external model endpoint..."
-	@LLAMA_STACK_BASE_URL="$(copilot.llmBaseUrl)"; \
+	@LLAMA_STACK_BASE_URL="$(llm.baseUrl)"; \
 	if [ -z "$$LLAMA_STACK_BASE_URL" ]; then \
-		LLAMA_STACK_BASE_URL=$$(yq e '.llamaStack.baseUrl' $(COPILOT_BACKEND_CHART)/values.yaml); \
+		LLAMA_STACK_BASE_URL=$$(yq e '.llm.baseUrl' $(COPILOT_BACKEND_CHART)/values.yaml); \
 	fi; \
-	LLAMA_STACK_MODEL="$(copilot.llmModel)"; \
+	LLAMA_STACK_MODEL="$(llm.model)"; \
 	if [ -z "$$LLAMA_STACK_MODEL" ]; then \
-		LLAMA_STACK_MODEL=$$(yq e '.llamaStack.model' $(COPILOT_BACKEND_CHART)/values.yaml); \
+		LLAMA_STACK_MODEL=$$(yq e '.llm.model' $(COPILOT_BACKEND_CHART)/values.yaml); \
 	fi; \
-	LLAMA_STACK_API_KEY="$(copilot.llmApiKey)"; \
+	LLAMA_STACK_API_KEY="$(llm.apiKey)"; \
 	echo "Using baseUrl: $$LLAMA_STACK_BASE_URL"; \
 	echo "Using model: $$LLAMA_STACK_MODEL"; \
 	echo "Using API key: $${LLAMA_STACK_API_KEY:+[provided]}$${LLAMA_STACK_API_KEY:-[not provided]}"; \
@@ -655,7 +658,7 @@ else
 		echo "ERROR: Missing required configuration for external model:"; \
 		echo "  baseUrl: $$LLAMA_STACK_BASE_URL"; \
 		echo "  model: $$LLAMA_STACK_MODEL"; \
-		echo "Please set copilot.llmBaseUrl and copilot.llmModel, or configure them in copilot-backend/values.yaml"; \
+		echo "Please set llm.baseUrl and llm.model, or configure them in copilot-backend/values.yaml (llm section)"; \
 		exit 1; \
 	fi; \
 	helm -n $(NAMESPACE) upgrade --install $(LLAMA_STACK_DISTRIBUTION_NAME) $(COPILOT_LLAMA_STACK_CHART) \
@@ -663,7 +666,7 @@ else
 		--set container.port=$(LLAMA_STACK_SERVICE_PORT) \
 		--set model.name=$$LLAMA_STACK_MODEL \
 		--set model.url=$$LLAMA_STACK_BASE_URL \
-		$(if $(copilot.llmApiKey),--set model.apiKey=$(copilot.llmApiKey),) \
+		$(if $(llm.apiKey),--set model.apiKey=$(llm.apiKey),) \
 		--timeout 10m
 endif
 	@echo "Waiting for Llama Stack to be ready..."

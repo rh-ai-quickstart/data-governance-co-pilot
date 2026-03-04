@@ -23,13 +23,15 @@ container:
 # NOTE: These values are populated at deployment time from copilot-backend/values.yaml
 # via the Makefile. The values here are just empty placeholders.
 #
-# Source of truth: helm/copilot-backend/values.yaml (llamaStack section)
+# Source of truth: helm/copilot-backend/values.yaml (llm section - shared by both modes)
 #
 # Deployment paths:
 # 1. DEPLOY_MODEL=true: Extracted from deployed model (InferenceService)
-# 2. DEPLOY_MODEL=false: Read from copilot-backend/values.yaml (llamaStack.baseUrl, llamaStack.model)
+# 2. DEPLOY_MODEL=false: Read from copilot-backend/values.yaml (llm.baseUrl, llm.model, llm.apiKey)
+# 3. CLI override: Pass copilot.llmBaseUrl, copilot.llmModel, copilot.llmApiKey to make install
 model:
   # Model name (populated via --set model.name=... from Makefile)
+  # Note: Llama Stack requires OpenAI-compatible function calling format
   name: ""
   # vLLM service URL (populated via --set model.url=... from Makefile)
   url: ""

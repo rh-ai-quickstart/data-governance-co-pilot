@@ -23,28 +23,43 @@ provider:
 mcp:
   serviceUrl: "http://pg-airman-mcp-service:8000"
 
-# LLM Configuration (MCP-Direct mode only)
+# Llama Stack Configuration (only used when provider.mode=llama_stack)
+llamaStack:
+  # Llama Stack service URL (internal Kubernetes service)
+  # This is populated automatically by the Makefile
+  baseUrl: "http://copilot-llama-stack-service:8321"
+
+# LLM Configuration (used for both MCP-Direct and Llama Stack modes)
 llm:
+  # LLM endpoint URL (e.g., vLLM server, OpenAI-compatible endpoint, litellm proxy)
+  # Examples:
+  #   - Deployed model: "https://qwen3-14b-namespace.apps.cluster.com/v1"
+  #   - External endpoint: "https://litellm-prod.apps.maas.redhatworkshops.io/v1"
   # baseUrl: "https://nvidia-nemotron-nano-9b-v2-samouelian-mcp.apps.ai-dev01.kni.syseng.devcluster.openshift.com/v1"
-  baseUrl: 	https://litellm-prod.apps.maas.redhatworkshops.io/v1
-  model: qwen3-14b
+  # baseUrl: https://litellm-prod.apps.maas.redhatworkshops.io/v1
+  baseUrl: ""
+
+  # Model name
+  # For MCP-Direct mode: Used as-is (e.g., "qwen3-14b", "nvidia-nemotron-nano-9b-v2")
+  # For Llama Stack mode: Prefixed with "vllm-inference/" automatically
+  #model: qwen3-14b
+  model: ""
   # model: "nvidia-nemotron-nano-9b-v2"
+
   # API key for LLM service
   # IMPORTANT: Do not commit API keys to Git!
-  # Pass via: make copilot-backend-install copilot.llmApiKey=your-key
-  # For vLLM servers without authentication, use "not-needed"
+  # Pass via: make install llm.apiKey=your-key
+  # For vLLM servers without authentication, use "not-needed" or leave empty
   apiKey: ""  # Must be provided at deployment time
+
   # Maximum context length (tokens) for the LLM model
   # Should match or be slightly less than the model's --max-model-len setting
   # Default: 32768 (matches NVIDIA Nemotron Nano 9B v2 default)
   maxContextLength: 32768 #Note: When deploying your own model, you must configure your model with a max length as well. It may equal to or greater than this value.
-  # Tool call format: auto (default, detects from model name), nemotron, or openai
-  toolCallFormat: "auto"
 
-# Llama Stack Configuration (Llama Stack mode only)
-llamaStack:
-  baseUrl: "https://litellm-prod.apps.maas.redhatworkshops.io/v1"
-  model: "qwen3-14b"  # Model name without provider prefix (vllm-inference/ added automatically)
+  # Tool call format: auto (default, detects from model name), nemotron, or openai
+  # Only used in MCP-Direct mode (Llama Stack always uses OpenAI format)
+  toolCallFormat: "auto"
 
 resources:
   limits:

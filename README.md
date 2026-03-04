@@ -173,17 +173,41 @@ In this mode, Llama Stack (OpenShift AI) manages the agentic loop:
    cd data-governance-co-pilot
    ```
 
-3a. **Full Installation (with Llama Stack backend + Qwen3 model)**:
+3. **Enable llama stack support in OpenShift AI if using the llama_stack PROVIDER_MODE (see below)**
+
+See Activating the Llama Stack Operator here: https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_llama_stack/activating-the-llama-stack-operator_rag
+
+4. **This quickstart was tested using OpenShift 4.20.14 and the Red Hat Build of Llama Stack (0.3.5.1+rhai0) with the CRD
+API at llamastack.io/v1alpha1. To check the version of Llama Stack in your cluster, use these commands:
+
+Get API Version of the Red Hat Llama Stack Distribution CRD (Custom Resource Definition):
+   ```bash
+   oc get llamastackdistribution copilot-llama-stack -n samouelian-dev -o jsonpath='{.apiVersion}'
+   ```
+
+Get the Llama Stack version in your cluster:
+
+   ```bash
+   oc get datasciencecluster default-dsc -o json | jq -r '.status.components.llamastackoperator.releases[] | select(.name == \
+   "Llama Stack") | .version'
+   ```
+
+5. The installation of this quickstart requires the make utility and supports multiple deployment modes. 
+
+IMPORTANT: In this initial release, only the first two models below are fully tested. This mode uses the Llama Stack distribution within OpenShift AI with either a new deployment of the Qwen3 model or an existing deployment you'd prefer to use. 
+
+5a. **Full Installation (with Llama Stack backend + Qwen3 model)**:
    ```bash
    make install NAMESPACE=your-namespace \
      DEPLOY_MODEL=true \
-     MODEL=qwen3 PROVIDER_MODE=llama_stack \
+     MODEL=qwen3 \
+     PROVIDER_MODE=llama_stack \
      postgres.userId=postgres \
      postgres.password=postgres \
      postgres.databaseName=postgres
    ```
 
-3b. **Same as 3a above except without the model**:
+5b. **Same as 5a above except without the model**:
 
 NOTE: In this mode, you must deploy a Qwen3-14B model and provide it's endpoint URL and model resource name
 in the copilot-backend/values.yaml file. Provide the apikey when invoking the make command as shown below. Also, take
@@ -200,7 +224,7 @@ note of required configuration parameters for your existing model (see qwen3-mod
      copilot.llmApiKey=yourapikey
    ```
 
-3c. **Full Installation (with MCP Direct backend + Nemotron model)**:
+5c. **Full Installation (with MCP Direct backend + Nemotron model)**:
    ```bash
    make install NAMESPACE=your-namespace \
      PROVIDER_MODE=mcp_direct \
@@ -211,7 +235,7 @@ note of required configuration parameters for your existing model (see qwen3-mod
      postgres.databaseName=postgres \
    ```
 
-3c. **Same as 3c above exception without the model**:
+5d. **Same as 5c above exception without the model**:
 
 NOTE: In this mode, you must deploy a Nemotron Nano 9b model and provide it's endpoint URL and model resource name
 in the copilot-backend/values.yaml file. Provide the apikey when invoking the make command as shown below. Also, take
@@ -228,124 +252,16 @@ note of required configuration parameters for your existing model (see nemotron-
      copilot.llmApiKey=yourapikey
    ```
 
-**Using Existing Models**:
+### Post Deployment
 
-You can also deploy the quickstart using an existing model by specifying `DEPLOY_MODEL=false` and providing the URL endpoint and model name in the values.yaml file in the copilot-backend and copilot-llama-stack helm charts. You must then provide the API key at the terminal by setting `copilot.llmApiKey=your_key_here`.
+1. **Login to the Data Governance Copilot**:
 
-### Deployment Options
+Once your make installation completes, a URL is shown. Point your browser to this URL to start using the data governance copilot. You can also retrieve the URL using this command:
 
-The application supports two deployment modes. Choose the one that fits your infrastructure:
-
-#### Option 1: Custom MCP Client Mode (Default)
-
-This mode deploys a vLLM model instance and manages the agentic loop in the backend.
-
-**Deploy with Nemotron Model** (default):
-```bash
-make install NAMESPACE=$NAMESPACE \
-  PROVIDER_MODE=mcp_direct \
-  DEPLOY_MODEL=true \
-  MODEL=nemotron \
-  postgres.userId=<your-db-user> \
-  postgres.password=<your-db-password> \
-  postgres.databaseName=<your-db-name>
-```
-
-**Deploy with Llama 3.1 Model** (requires HuggingFace token):
-```bash
-# The application will automatically deploy Llama 3.1 vLLM instance with required flags:
-# --enable-auto-tool-choice --tool-call-parser llama3_json --max-model-len 32768
-
-make install NAMESPACE=$NAMESPACE \
-  PROVIDER_MODE=mcp_direct \
-  DEPLOY_MODEL=true \
-  MODEL=llama \
-  HF_TOKEN=<your-huggingface-token> \
-  postgres.userId=<your-db-user> \
-  postgres.password=<your-db-password> \
-  postgres.databaseName=<your-db-name>
-```
-
-**Using External vLLM Instance**:
-```bash
-make install NAMESPACE=$NAMESPACE \
-  PROVIDER_MODE=mcp_direct \
-  DEPLOY_MODEL=false \
-  llm.model=<model-name> \
-  llm.baseUrl=<your-vllm-url> \
-  copilot.llmApiKey=<your-api-key> \
-  postgres.userId=<your-db-user> \
-  postgres.password=<your-db-password> \
-  postgres.databaseName=<your-db-name>
-```
-
-#### Option 2: Llama Stack Mode
-
-This mode leverages OpenShift AI's Llama Stack operator for agent orchestration.
-
-**Prerequisites**:
-- OpenShift AI 3.2+ installed on cluster
-- Llama Stack requires models with OpenAI function calling support (Nemotron is not compatible)
-
-**Deploy with Auto-Deployed Llama 3.1 Model**:
-```bash
-make install NAMESPACE=$NAMESPACE \
-  PROVIDER_MODE=llama_stack \
-  DEPLOY_MODEL=true \
-  MODEL=llama \
-  HF_TOKEN=<your-huggingface-token> \
-  postgres.userId=<your-db-user> \
-  postgres.password=<your-db-password> \
-  postgres.databaseName=<your-db-name>
-```
-
-**Deploy with Existing vLLM Model**:
-```bash
-# Ensure your vLLM model has these flags:
-# --enable-auto-tool-choice --tool-call-parser llama3_json
-
-make install NAMESPACE=$NAMESPACE \
-  PROVIDER_MODE=llama_stack \
-  DEPLOY_MODEL=false \
-  llamaStack.model=vllm-inference/<your-model-name> \
-  postgres.userId=<your-db-user> \
-  postgres.password=<your-db-password> \
-  postgres.databaseName=<your-db-name>
-```
-
-This automatically deploys:
-- Llama 3.1 vLLM model with function calling support (if DEPLOY_MODEL=true)
-- LlamaStackDistribution custom resource
-- MCP server with SSE transport
-- Copilot backend configured for Llama Stack
-- Web UI
-
-**Important**: Nemotron models use a custom `<TOOLCALL>` format that is incompatible with Llama Stack. The Makefile includes validation to prevent this invalid configuration.
-
-### Verify Deployment
-
-1. **Check Pod Status**:
-   ```bash
-   oc get pods -n $NAMESPACE
-   ```
-
-   Expected pods:
-   - `copilot-ui-*` - Web interface
-   - `copilot-backend-*` - FastAPI backend
-   - `pg-airman-mcp-*` - MCP server
-   - Model pods (if DEPLOY_MODEL=true):
-     - `meta-llama-llama-31-8b-instruct-predictor-*` (MODEL=llama)
-     - `nvidia-nemotron-nano-9b-v2-predictor-*` (MODEL=nemotron)
-   - `copilot-llama-stack-*` (Llama Stack mode only)
-
-2. **Access the UI**:
    ```bash
    oc get route copilot-ui -n $NAMESPACE -o jsonpath='{.spec.host}'
    ```
-
-   Open the URL in your browser.
-
-3. **Test the Application**:
+2. **Test the Application**:
    - Navigate to the web interface
    - Try a sample query: "List all tables in the database"
    - Verify you see streaming responses with tool calls and results
@@ -359,9 +275,8 @@ The Makefile supports several configuration parameters:
 PROVIDER_MODE=mcp_direct        # Options: mcp_direct (default), llama_stack
 
 # Model selection and deployment
-MODEL=nemotron                  # Options: nemotron (default), llama
+MODEL=nemotron                  # Options: nemotron (default), qwen3 (NOTE: Use qwen3 with llama_stack mode and nemotron with mcp_direct)
 DEPLOY_MODEL=true               # Options: true (auto-deploy), false (use existing)
-HF_TOKEN=<your-token>           # Required when MODEL=llama and DEPLOY_MODEL=true
 
 # Model deployment options (when DEPLOY_MODEL=false)
 llm.model=<model-name>          # Model identifier for Custom MCP Client mode
@@ -383,40 +298,6 @@ llm.toolCallFormat=auto         # Options: auto (default), nemotron, openai
                                 # auto: detects from model name
 ```
 
-**Model Compatibility Matrix**:
-
-| MODEL | PROVIDER_MODE | HF_TOKEN Required | Tool Format | Notes |
-|-------|---------------|-------------------|-------------|-------|
-| nemotron | mcp_direct | No | Custom tags | Default configuration |
-| llama | mcp_direct | Yes | OpenAI | Standard function calling |
-| nemotron | llama_stack | N/A | N/A | **Invalid** - Makefile prevents this |
-| llama | llama_stack | Yes | OpenAI | Recommended for Llama Stack |
-
-### Troubleshooting
-
-**HuggingFace Authentication Errors**:
-If Llama model deployment fails with authentication errors:
-```bash
-# Check the InferenceService events
-oc describe inferenceservice meta-llama-llama-31-8b-instruct -n $NAMESPACE
-
-# Common issues:
-# - HF_TOKEN not provided: Set HF_TOKEN parameter in make command
-# - Invalid token: Regenerate token at https://huggingface.co/settings/tokens
-# - License not accepted: Accept license at https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct
-```
-
-**Model Compatibility Validation Errors**:
-```bash
-# Error: "Nemotron model is not compatible with Llama Stack mode"
-# Solution: Use MODEL=llama with PROVIDER_MODE=llama_stack
-#       OR Use MODEL=nemotron with PROVIDER_MODE=mcp_direct
-
-# Error: "HF_TOKEN is required when MODEL=llama"
-# Solution: Provide your HuggingFace token in the make command
-#          HF_TOKEN=<your-token>
-```
-
 **GPU Scheduling Issues**:
 If pods fail to schedule due to GPU taints:
 ```bash
@@ -427,23 +308,6 @@ oc describe node <gpu-node-name> | grep Taints
 # - helm/nemotron-model/templates/inferenceservice.yaml
 # - helm/llama-model/templates/inferenceservice.yaml
 ```
-
-**MCP Connection Errors**:
-- Custom MCP Client mode: Check that `pg-airman-mcp` service uses streamable-http transport
-- Llama Stack mode: Check that `pg-airman-mcp` service uses SSE transport (`/sse` endpoint)
-
-**Tool Calling Failures (Llama Stack mode)**:
-Verify vLLM has the required flags:
-```bash
-oc logs <vllm-pod> | grep "enable-auto-tool-choice"
-oc logs <vllm-pod> | grep "tool-call-parser"
-```
-
-**Model Not Found (Llama Stack mode)**:
-Ensure the model name includes the provider prefix:
-- Correct: `vllm-inference/redhataillama-31-8b-instruct`
-- Incorrect: `redhataillama-31-8b-instruct`
-
 ## Delete
 
 To remove the Data Governance Co-Pilot and all associated resources:
