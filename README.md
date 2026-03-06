@@ -271,10 +271,16 @@ Note: Llama Stack mode works only with version 0.3.5.1+rhai0. It will not work w
 See 4 above to learn how to return the version of Llama Stack your cluster supports.
 
    ```bash
-   make install NAMESPACE=samouelian-dev DEPLOY_MODEL=false MODEL=qwen3 \
-   PROVIDER_MODE=llama_stack postgres.userId=postgres \
-   postgres.password=postgres postgres.databaseName=postgres \
-   llm.apiKey=xyz llm.baseUrl=https://xyz.io/v1 llm.model=qwen3-14b
+   make install NAMESPACE=samouelian-dev \
+   DEPLOY_MODEL=false \
+   MODEL=qwen3 \
+   PROVIDER_MODE=llama_stack \
+   postgres.userId=postgres \
+   postgres.password=postgres \
+   postgres.databaseName=postgres \
+   llm.apiKey=xyz \
+   llm.baseUrl=https://xyz.io/v1 \
+   llm.model=qwen3-14b
    ```
 
 5c. **Full Installation (with MCP Direct backend + Nemotron or Qwen3 model)**:
@@ -288,7 +294,7 @@ Using Nemotron model:
      MODEL=nemotron \
      postgres.userId=postgres \
      postgres.password=postgres \
-     postgres.databaseName=postgres \
+     postgres.databaseName=postgres
    ```
 
 Using qwen3 model:
@@ -300,7 +306,7 @@ Using qwen3 model:
      MODEL=qwen3 \
      postgres.userId=postgres \
      postgres.password=postgres \
-     postgres.databaseName=postgres \
+     postgres.databaseName=postgres
    ```
 
 
