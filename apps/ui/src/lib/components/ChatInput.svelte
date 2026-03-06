@@ -75,9 +75,9 @@
 	<div class="input-footer">
 		<div class="provider-mode">
 			{#if providerMode === 'llama_stack'}
-				Using Llama Stack and Qwen3 on OpenShift AI
+				Using OpenShift AI Llama Stack
 			{:else if providerMode === 'mcp_direct'}
-				Using MCP Direct with Nvidia Nemotron on OpenShift AI
+				Using MCP on OpenShift AI
 			{/if}
 		</div>
 		<div class="input-hint">Press Enter to send, Shift+Enter for new line</div>
