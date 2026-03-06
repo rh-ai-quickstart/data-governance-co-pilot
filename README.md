@@ -34,6 +34,8 @@ Traditionally, this knowledge lives in static PDF documents, scattered wikis, or
 
 _(Videos and demonstrations to be added)_
 
+![Screnshot](docs/images/screenshot.png)
+
 ### Architecture Diagrams
 
 ![Architecture Diagram](docs/images/architecture.png)
