@@ -27,3 +27,13 @@ Create chart name and version as used by the chart label.
 {{- define "copilot-ui.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
+
+{{/*
+Common labels
+*/}}
+{{- define "copilot-ui.labels" -}}
+app: {{ include "copilot-ui.name" . }}
+chart: {{ include "copilot-ui.chart" . }}
+release: {{ .Release.Name }}
+heritage: {{ .Release.Service }}
+{{- end }}

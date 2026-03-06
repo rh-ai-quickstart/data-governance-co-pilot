@@ -19,6 +19,10 @@ spec:
         app: {{ include "copilot-ui.name" . }}
         release: {{ .Release.Name }}
     spec:
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "copilot-ui.fullname" . }}-config
       containers:
       - name: copilot-ui
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -27,6 +31,10 @@ spec:
         - name: http
           containerPort: 8080
           protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/nginx/html/config.js
+          subPath: config.js
         livenessProbe:
           {{- toYaml .Values.livenessProbe | nindent 10 }}
         readinessProbe:

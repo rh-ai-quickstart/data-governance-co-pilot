@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { getBackendUrl } from '$lib/config';
 	import MessageList from './MessageList.svelte';
 	import ChatInput from './ChatInput.svelte';
 	import ChatHistory from './ChatHistory.svelte';
@@ -44,7 +45,7 @@
 
 	async function fetchProviderInfo() {
 		try {
-			const backendUrl = import.meta.env.VITE_COPILOT_BACKEND_URL || 'http://localhost:8080';
+			const backendUrl = getBackendUrl();
 			const response = await fetch(`${backendUrl}/provider/info`);
 			if (response.ok) {
 				const data = await response.json();
@@ -172,7 +173,7 @@
 
 		try {
 			// Get backend URL from environment variable or use default
-			const backendUrl = import.meta.env.VITE_COPILOT_BACKEND_URL || 'http://localhost:8080';
+			const backendUrl = getBackendUrl();
 			console.log('[ChatInterface] Backend URL:', backendUrl);
 
 			const requestBody = {

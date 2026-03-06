@@ -696,15 +696,13 @@ copilot-llama-stack-uninstall:
 build-copilot-ui-image:
 	@echo "Creating ImageStream for copilot-ui..."
 	@oc apply -f $(COPILOT_UI_CHART)/imagestream.yaml -n $(NAMESPACE)
-	@echo "Getting copilot-backend route URL..."
-	@BACKEND_URL=$$(oc get route copilot-backend -o jsonpath='https://{.spec.host}' -n $(NAMESPACE) 2>/dev/null || echo "http://copilot-backend:8080"); \
-	echo "Backend URL: $$BACKEND_URL"; \
-	echo "Creating BuildConfig for copilot-ui..."; \
-	cat $(COPILOT_UI_CHART)/buildconfig.yaml | sed "s|\$${BACKEND_URL}|$$BACKEND_URL|g" | oc apply -f - -n $(NAMESPACE); \
-	echo "Starting image build (this may take 3-5 minutes)..."; \
-	echo "Uploading UI source files to OpenShift..."; \
-	oc start-build copilot-ui --from-dir=../. --follow -n $(NAMESPACE) || echo "Build already running or completed"; \
-	echo "copilot-ui image built successfully"
+	@echo "Creating BuildConfig for copilot-ui..."
+	@oc apply -f $(COPILOT_UI_CHART)/buildconfig.yaml -n $(NAMESPACE)
+	@echo "Starting image build (this may take 3-5 minutes)..."
+	@echo "Uploading UI source files to OpenShift..."
+	@oc start-build copilot-ui --from-dir=../. --follow -n $(NAMESPACE) || echo "Build already running or completed"
+	@echo "copilot-ui image built successfully"
+	@echo "Note: Backend URL will be configured at runtime via COPILOT_BACKEND_URL env var"
 
 # Install copilot-ui frontend
 .PHONY: copilot-ui-install

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { getBackendUrl } from '$lib/config';
+
 	let {
 		conversationId,
 		onPolicyChange,
@@ -30,7 +32,7 @@
 
 	async function checkPolicyStatus() {
 		try {
-			const backendUrl = import.meta.env.VITE_COPILOT_BACKEND_URL || 'http://localhost:8080';
+			const backendUrl = getBackendUrl();
 			const response = await fetch(`${backendUrl}/policy/status`);
 			if (response.ok) {
 				const data = await response.json();
@@ -44,7 +46,7 @@
 
 	async function fetchProviderInfo() {
 		try {
-			const backendUrl = import.meta.env.VITE_COPILOT_BACKEND_URL || 'http://localhost:8080';
+			const backendUrl = getBackendUrl();
 			const response = await fetch(`${backendUrl}/provider/info`);
 			if (response.ok) {
 				const data = await response.json();
@@ -121,7 +123,7 @@
 			isUploading = true;
 
 			// Upload to backend with conversation_id if clearing is needed
-			const backendUrl = import.meta.env.VITE_COPILOT_BACKEND_URL || 'http://localhost:8080';
+			const backendUrl = getBackendUrl();
 			const requestBody: { policy_text: string; conversation_id?: string } = {
 				policy_text: policyText
 			};
@@ -181,7 +183,7 @@
 		}
 
 		try {
-			const backendUrl = import.meta.env.VITE_COPILOT_BACKEND_URL || 'http://localhost:8080';
+			const backendUrl = getBackendUrl();
 			const response = await fetch(`${backendUrl}/policy`, {
 				method: 'DELETE'
 			});
