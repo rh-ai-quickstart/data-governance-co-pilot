@@ -22,9 +22,9 @@ mcp:
 
 # Container image configuration
 image:
-  repository: enterprisedb/pg-airman-mcp
+  repository: quay.io/rh-ai-quickstart/pg-airman-mcp
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 # Resource limits
 resources:

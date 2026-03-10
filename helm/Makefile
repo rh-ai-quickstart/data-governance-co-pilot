@@ -39,6 +39,10 @@ DEPLOY_PGADMIN ?= false
 # Set to true to build on cluster, false to pull from Quay
 BUILD_COPILOT_UI ?= false
 
+# Flag to control whether to build pg-airman-mcp on cluster (default: false)
+# Set to true to build on cluster, false to pull from Quay
+BUILD_PG_AIRMAN_MCP ?= false
+
 # Llama Stack configuration (can be overridden)
 LLAMA_STACK_DISTRIBUTION_NAME ?= copilot-llama-stack
 LLAMA_STACK_SERVICE_PORT ?= 8321
@@ -74,10 +78,11 @@ help:
 	@echo "                  If DEPLOY_PGADMIN=true: pgadmin.email, pgadmin.password are required"
 	@echo "                  Example (Nemotron): make install NAMESPACE=myns MODEL=nemotron DEPLOY_MODEL=true PROVIDER_MODE=mcp_direct ..."
 	@echo "                  Example (Qwen3): make install NAMESPACE=myns MODEL=qwen3 PROVIDER_MODE=llama_stack llm.apiKey=sk-xxx ..."
-	@echo "  pg-airman-mcp-install - Installs pg-airman-mcp MCP server (builds custom image with libpq5 fix)"
+	@echo "  pg-airman-mcp-install - Installs pg-airman-mcp MCP server"
 	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName"
+	@echo "                  Optional: BUILD_PG_AIRMAN_MCP=true (build on cluster, default pulls from Quay)"
 	@echo "                  Optional: pgairman.accessMode (default: restricted)"
-	@echo "                  Note: First run builds custom image (5-10 minutes), subsequent runs are faster"
+	@echo "                  Default: Pulls quay.io/rh-ai-quickstart/pg-airman-mcp:latest"
 	@echo "  nemotron-model-install - Deploys NVIDIA Nemotron Nano 9B v2 model using KServe"
 	@echo "                  Required: NAMESPACE"
 	@echo "                  Optional: model.storage.s3Bucket, model.storage.uri"
@@ -106,6 +111,7 @@ help:
 	@echo "  DEPLOY_MINIO             - Set to 'true' to deploy MinIO object storage (default: false)"
 	@echo "  DEPLOY_PGADMIN           - Set to 'true' to deploy pgAdmin web UI (default: false)"
 	@echo "  BUILD_COPILOT_UI         - Set to 'true' to build UI on cluster, false to pull from Quay (default: false)"
+	@echo "  BUILD_PG_AIRMAN_MCP      - Set to 'true' to build MCP server on cluster, false to pull from Quay (default: false)"
 	@echo "  MODEL                    - Model to deploy: nemotron or qwen3 (default: qwen3)"
 	@echo "                             nemotron: NVIDIA Nemotron Nano 9B v2 (custom tool calling, MCP-Direct only)"
 	@echo "                             qwen3: Qwen3 14B via remote LiteLLM (OpenAI function calling, Llama Stack only)"
@@ -345,8 +351,11 @@ build-pg-airman-mcp-image:
 
 # Install pg-airman-mcp MCP server
 .PHONY: pg-airman-mcp-install
-pg-airman-mcp-install: check-postgres-credentials build-pg-airman-mcp-image
-	@echo "Installing pg-airman-mcp helm chart..."
+pg-airman-mcp-install: check-postgres-credentials
+ifeq ($(BUILD_PG_AIRMAN_MCP),true)
+	@echo "BUILD_PG_AIRMAN_MCP=true: Building pg-airman-mcp image on cluster..."
+	@$(MAKE) build-pg-airman-mcp-image NAMESPACE=$(NAMESPACE)
+	@echo "Installing pg-airman-mcp helm chart with cluster-built image..."
 ifeq ($(PROVIDER_MODE),llama_stack)
 	@echo "PROVIDER_MODE=llama_stack: Using SSE transport for Llama Stack compatibility"
 	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
@@ -361,11 +370,6 @@ ifeq ($(PROVIDER_MODE),llama_stack)
 		--set mcp.transport=sse \
 		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
 		--timeout 5m
-	@echo "Waiting for pg-airman-mcp to be ready..."
-	@oc rollout status deployment/pg-airman-mcp -n $(NAMESPACE) --timeout=300s
-	@echo "pg-airman-mcp installation complete."
-	@echo "Service URL (internal): http://pg-airman-mcp-service:8000"
-	@echo "Transport: sse (for Llama Stack), access mode: $(if $(pgairman.accessMode),$(pgairman.accessMode),restricted)"
 else
 	@echo "Using streamable-http transport (default)"
 	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
@@ -379,10 +383,40 @@ else
 		--set postgres.database=$(postgres.databaseName) \
 		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
 		--timeout 5m
+endif
+else
+	@echo "BUILD_PG_AIRMAN_MCP=false: Using Quay image (quay.io/rh-ai-quickstart/pg-airman-mcp)..."
+	@echo "Installing pg-airman-mcp helm chart..."
+ifeq ($(PROVIDER_MODE),llama_stack)
+	@echo "PROVIDER_MODE=llama_stack: Using SSE transport for Llama Stack compatibility"
+	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
+		--set postgres.host=pgvector-0.pgvector-postgres-service \
+		--set postgres.port=5432 \
+		--set postgres.user=$(postgres.userId) \
+		--set postgres.password=$(postgres.password) \
+		--set postgres.database=$(postgres.databaseName) \
+		--set mcp.transport=sse \
+		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
+		--timeout 5m
+else
+	@echo "Using streamable-http transport (default)"
+	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
+		--set postgres.host=pgvector-0.pgvector-postgres-service \
+		--set postgres.port=5432 \
+		--set postgres.user=$(postgres.userId) \
+		--set postgres.password=$(postgres.password) \
+		--set postgres.database=$(postgres.databaseName) \
+		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
+		--timeout 5m
+endif
+endif
 	@echo "Waiting for pg-airman-mcp to be ready..."
 	@oc rollout status deployment/pg-airman-mcp -n $(NAMESPACE) --timeout=300s
 	@echo "pg-airman-mcp installation complete."
 	@echo "Service URL (internal): http://pg-airman-mcp-service:8000"
+ifeq ($(PROVIDER_MODE),llama_stack)
+	@echo "Transport: sse (for Llama Stack), access mode: $(if $(pgairman.accessMode),$(pgairman.accessMode),restricted)"
+else
 	@echo "Transport: streamable-http (default), access mode: $(if $(pgairman.accessMode),$(pgairman.accessMode),restricted)"
 endif
 
