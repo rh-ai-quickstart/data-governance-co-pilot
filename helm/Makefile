@@ -35,6 +35,10 @@ DEPLOY_MINIO ?= false
 # Flag to control whether to deploy pgAdmin (default: false)
 DEPLOY_PGADMIN ?= false
 
+# Flag to control whether to build copilot-ui on cluster (default: false)
+# Set to true to build on cluster, false to pull from Quay
+BUILD_COPILOT_UI ?= false
+
 # Llama Stack configuration (can be overridden)
 LLAMA_STACK_DISTRIBUTION_NAME ?= copilot-llama-stack
 LLAMA_STACK_SERVICE_PORT ?= 8321
@@ -92,7 +96,8 @@ help:
 	@echo "                  Note: First run builds custom image (3-5 minutes), subsequent runs are faster"
 	@echo "  copilot-ui-install - Installs copilot frontend (Svelte UI)"
 	@echo "                  Required: NAMESPACE"
-	@echo "                  Note: First run builds custom image (3-5 minutes), subsequent runs are faster"
+	@echo "                  Optional: BUILD_COPILOT_UI=true (build on cluster, default pulls from Quay)"
+	@echo "                  Default: Pulls quay.io/rh-ai-quickstart/copilot-ui:latest"
 	@echo "  uninstall     - Uninstalls the quickstart and clean up resources"
 	@echo ""
 	@echo "Configuration options (set via environment variables or make arguments):"
@@ -100,6 +105,7 @@ help:
 	@echo "  DEPLOY_MODEL             - Set to 'true' to auto-deploy and configure LLM model (default: false)"
 	@echo "  DEPLOY_MINIO             - Set to 'true' to deploy MinIO object storage (default: false)"
 	@echo "  DEPLOY_PGADMIN           - Set to 'true' to deploy pgAdmin web UI (default: false)"
+	@echo "  BUILD_COPILOT_UI         - Set to 'true' to build UI on cluster, false to pull from Quay (default: false)"
 	@echo "  MODEL                    - Model to deploy: nemotron or qwen3 (default: qwen3)"
 	@echo "                             nemotron: NVIDIA Nemotron Nano 9B v2 (custom tool calling, MCP-Direct only)"
 	@echo "                             qwen3: Qwen3 14B via remote LiteLLM (OpenAI function calling, Llama Stack only)"
@@ -208,6 +214,17 @@ check-model-provider-compatibility:
 namespace:
 	@oc create namespace $(NAMESPACE) &> /dev/null && oc label namespace $(NAMESPACE) modelmesh-enabled=false ||:
 	@oc project $(NAMESPACE) &> /dev/null ||:
+	@echo "Waiting for default service accounts to be created..."
+	@bash -c 'for i in {1..10}; do \
+		if oc get sa builder -n $(NAMESPACE) &> /dev/null; then \
+			echo "Builder service account is ready"; \
+			exit 0; \
+		fi; \
+		echo "Waiting for builder service account (attempt $$i/10)..."; \
+		sleep 2; \
+	done; \
+	echo "ERROR: builder service account not created after 20 seconds"; \
+	exit 1'
 
 .PHONY: install
 install: check-oc-version check-postgres-credentials check-model-provider-compatibility namespace
@@ -706,8 +723,11 @@ build-copilot-ui-image:
 
 # Install copilot-ui frontend
 .PHONY: copilot-ui-install
-copilot-ui-install: build-copilot-ui-image
-	@echo "Installing copilot-ui helm chart..."
+copilot-ui-install:
+ifeq ($(BUILD_COPILOT_UI),true)
+	@echo "BUILD_COPILOT_UI=true: Building copilot-ui image on cluster..."
+	@$(MAKE) build-copilot-ui-image NAMESPACE=$(NAMESPACE)
+	@echo "Installing copilot-ui helm chart with cluster-built image..."
 	@BACKEND_URL=$$(oc get route copilot-backend -o jsonpath='https://{.spec.host}' -n $(NAMESPACE) 2>/dev/null || echo "http://copilot-backend:8080"); \
 	helm -n $(NAMESPACE) upgrade --install copilot-ui $(COPILOT_UI_CHART) \
 		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-ui \
@@ -715,6 +735,14 @@ copilot-ui-install: build-copilot-ui-image
 		--set image.pullPolicy=Always \
 		--set backend.url=$$BACKEND_URL \
 		--timeout 5m
+else
+	@echo "BUILD_COPILOT_UI=false: Using Quay image (quay.io/rh-ai-quickstart/copilot-ui)..."
+	@echo "Installing copilot-ui helm chart..."
+	@BACKEND_URL=$$(oc get route copilot-backend -o jsonpath='https://{.spec.host}' -n $(NAMESPACE) 2>/dev/null || echo "http://copilot-backend:8080"); \
+	helm -n $(NAMESPACE) upgrade --install copilot-ui $(COPILOT_UI_CHART) \
+		--set backend.url=$$BACKEND_URL \
+		--timeout 5m
+endif
 	@echo "Waiting for copilot-ui to be ready..."
 	@oc rollout status deployment/copilot-ui -n $(NAMESPACE) --timeout=300s
 	@echo "copilot-ui installation complete."

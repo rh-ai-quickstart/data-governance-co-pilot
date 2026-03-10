@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: image-registry.openshift-image-registry.svc:5000/NAMESPACE/copilot-ui
+  repository: quay.io/rh-ai-quickstart/copilot-ui
   pullPolicy: Always
   tag: "latest"
 

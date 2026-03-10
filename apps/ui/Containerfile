@@ -1,0 +1,54 @@
+# Build stage
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml* package-lock.json* ./
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Install dependencies
+RUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; \
+    elif [ -f package-lock.json ]; then npm ci; \
+    else npm install; fi
+
+# Copy source files
+COPY . .
+
+# Build the app
+# Note: Backend URL is now configured at runtime (not build time)
+# via /config.js mounted from ConfigMap
+RUN if [ -f pnpm-lock.yaml ]; then pnpm run build; \
+    else npm run build; fi
+
+# Runtime stage - nginx to serve static files
+FROM nginxinc/nginx-unprivileged:alpine
+
+# Copy built files from builder (SvelteKit output with adapter-static)
+COPY --from=builder /app/build /usr/share/nginx/html
+
+# Create nginx config for SPA
+RUN echo 'server { \
+    listen 8080; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location / { \
+        try_files $uri $uri/ /index.html; \
+    } \
+    # Disable caching for index.html and config.js to ensure latest version \
+    location = /index.html { \
+        add_header Cache-Control "no-cache, no-store, must-revalidate"; \
+    } \
+    location = /config.js { \
+        add_header Cache-Control "no-cache, no-store, must-revalidate"; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
+
+# OpenShift compatibility
+USER 1001
+
+EXPOSE 8080
+
+CMD ["nginx", "-g", "daemon off;"]
