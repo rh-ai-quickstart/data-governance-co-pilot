@@ -47,6 +47,10 @@ BUILD_PG_AIRMAN_MCP ?= false
 # Set to true to build on cluster, false to pull from Quay
 BUILD_COPILOT_BACKEND ?= false
 
+# Flag to control whether to build pgvector data loader on cluster (default: false)
+# Set to true to build on cluster, false to pull from Quay
+BUILD_DATA_LOADER ?= false
+
 # Llama Stack configuration (can be overridden)
 LLAMA_STACK_DISTRIBUTION_NAME ?= copilot-llama-stack
 LLAMA_STACK_SERVICE_PORT ?= 8321
@@ -117,6 +121,7 @@ help:
 	@echo "  BUILD_COPILOT_UI         - Set to 'true' to build UI on cluster, false to pull from Quay (default: false)"
 	@echo "  BUILD_PG_AIRMAN_MCP      - Set to 'true' to build MCP server on cluster, false to pull from Quay (default: false)"
 	@echo "  BUILD_COPILOT_BACKEND    - Set to 'true' to build backend on cluster, false to pull from Quay (default: false)"
+	@echo "  BUILD_DATA_LOADER        - Set to 'true' to build data loader on cluster, false to pull from Quay (default: false)"
 	@echo "  MODEL                    - Model to deploy: nemotron or qwen3 (default: qwen3)"
 	@echo "                             nemotron: NVIDIA Nemotron Nano 9B v2 (custom tool calling, MCP-Direct only)"
 	@echo "                             qwen3: Qwen3 14B via remote LiteLLM (OpenAI function calling, Llama Stack only)"
@@ -306,13 +311,26 @@ build-data-loader-image:
 	@echo "Data loader image built successfully in OpenShift internal registry"
 
 .PHONY: database-install
-database-install: build-data-loader-image
-	@echo "Installing, configuring and loading Postgres database ..."
+database-install:
+ifeq ($(BUILD_DATA_LOADER),true)
+	@echo "BUILD_DATA_LOADER=true: Building pgvector data loader image on cluster..."
+	@$(MAKE) build-data-loader-image NAMESPACE=$(NAMESPACE)
+	@echo "Installing, configuring and loading Postgres database with cluster-built data loader..."
+	@helm -n $(NAMESPACE) upgrade --install postgres $(POSTGRES_CHART) \
+		--set postgres.userId=$(postgres.userId) \
+		--set postgres.password=$(postgres.password) \
+		--set postgres.databaseName=$(postgres.databaseName) \
+		--set dataLoader.image=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/pgvector-data-loader:latest \
+		--timeout 10m
+else
+	@echo "BUILD_DATA_LOADER=false: Using Quay image (quay.io/rh-ai-quickstart/pgvector-data-loader)..."
+	@echo "Installing, configuring and loading Postgres database..."
 	@helm -n $(NAMESPACE) upgrade --install postgres $(POSTGRES_CHART) \
 		--set postgres.userId=$(postgres.userId) \
 		--set postgres.password=$(postgres.password) \
 		--set postgres.databaseName=$(postgres.databaseName) \
 		--timeout 10m
+endif
 	@echo "Waiting for data loading job to complete..."
 	@oc wait --for=condition=complete --timeout=600s job/pgvector-data-loader -n $(NAMESPACE) || \
 		(echo "Data loading job failed or timed out. Check logs with: oc logs job/pgvector-data-loader -n $(NAMESPACE)" && exit 1)

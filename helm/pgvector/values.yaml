@@ -6,6 +6,7 @@ postgres:
   databaseName: <postgres database name> # provide this when calling make (e.g., make install postgres.databaseName=ecommerce)
 
 dataLoader:
-  # Image defaults to OpenShift internal registry: image-registry.openshift-image-registry.svc:5000/<namespace>/pgvector-data-loader:latest
-  # Override only if you want to use an external registry like Quay
-  image: ""
+  # Data loader image (loads sample e-commerce data into PostgreSQL)
+  # Default: Pulls from Quay (quay.io/rh-ai-quickstart/pgvector-data-loader:latest)
+  # Override with BUILD_DATA_LOADER=true to build on cluster
+  image: "quay.io/rh-ai-quickstart/pgvector-data-loader:latest"
