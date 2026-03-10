@@ -43,6 +43,10 @@ BUILD_COPILOT_UI ?= false
 # Set to true to build on cluster, false to pull from Quay
 BUILD_PG_AIRMAN_MCP ?= false
 
+# Flag to control whether to build copilot-backend on cluster (default: false)
+# Set to true to build on cluster, false to pull from Quay
+BUILD_COPILOT_BACKEND ?= false
+
 # Llama Stack configuration (can be overridden)
 LLAMA_STACK_DISTRIBUTION_NAME ?= copilot-llama-stack
 LLAMA_STACK_SERVICE_PORT ?= 8321
@@ -95,10 +99,10 @@ help:
 	@echo "                  Note: Pulls from HuggingFace hf://Qwen/Qwen3-14B by default (public, no token needed)"
 	@echo "  copilot-backend-install - Installs copilot backend service (FastAPI orchestration layer)"
 	@echo "                  Required: NAMESPACE"
+	@echo "                  Optional: BUILD_COPILOT_BACKEND=true (build on cluster, default pulls from Quay)"
 	@echo "                  Optional: DEPLOY_MODEL=true (auto-extracts llmBaseUrl, llmModel, and llmApiKey from deployed model)"
 	@echo "                  If DEPLOY_MODEL=false: llm.baseUrl, llm.model, llm.apiKey can be overridden (defaults from values.yaml)"
-	@echo "                  Example: make copilot-backend-install NAMESPACE=myns DEPLOY_MODEL=true"
-	@echo "                  Note: First run builds custom image (3-5 minutes), subsequent runs are faster"
+	@echo "                  Default: Pulls quay.io/rh-ai-quickstart/copilot-backend:latest"
 	@echo "  copilot-ui-install - Installs copilot frontend (Svelte UI)"
 	@echo "                  Required: NAMESPACE"
 	@echo "                  Optional: BUILD_COPILOT_UI=true (build on cluster, default pulls from Quay)"
@@ -112,6 +116,7 @@ help:
 	@echo "  DEPLOY_PGADMIN           - Set to 'true' to deploy pgAdmin web UI (default: false)"
 	@echo "  BUILD_COPILOT_UI         - Set to 'true' to build UI on cluster, false to pull from Quay (default: false)"
 	@echo "  BUILD_PG_AIRMAN_MCP      - Set to 'true' to build MCP server on cluster, false to pull from Quay (default: false)"
+	@echo "  BUILD_COPILOT_BACKEND    - Set to 'true' to build backend on cluster, false to pull from Quay (default: false)"
 	@echo "  MODEL                    - Model to deploy: nemotron or qwen3 (default: qwen3)"
 	@echo "                             nemotron: NVIDIA Nemotron Nano 9B v2 (custom tool calling, MCP-Direct only)"
 	@echo "                             qwen3: Qwen3 14B via remote LiteLLM (OpenAI function calling, Llama Stack only)"
@@ -549,7 +554,15 @@ build-copilot-backend-image:
 
 # Install copilot-backend service
 .PHONY: copilot-backend-install
-copilot-backend-install: build-copilot-backend-image
+copilot-backend-install:
+ifeq ($(BUILD_COPILOT_BACKEND),true)
+	@echo "BUILD_COPILOT_BACKEND=true: Building copilot-backend image on cluster..."
+	@$(MAKE) build-copilot-backend-image NAMESPACE=$(NAMESPACE)
+	@echo "Installing copilot-backend helm chart with cluster-built image..."
+else
+	@echo "BUILD_COPILOT_BACKEND=false: Using Quay image (quay.io/rh-ai-quickstart/copilot-backend)..."
+	@echo "Installing copilot-backend helm chart..."
+endif
 ifeq ($(DEPLOY_MODEL),true)
 	@echo "DEPLOY_MODEL=true: Waiting for $(MODEL) model to be ready..."
 ifeq ($(MODEL),nemotron)
@@ -567,9 +580,7 @@ ifeq ($(MODEL),nemotron)
 	else \
 		echo "Installing copilot-backend in mcp_direct mode with nemotron model settings..."; \
 		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
-			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
-			--set image.tag=latest \
-			--set image.pullPolicy=Always \
+			$(if $(filter true,$(BUILD_COPILOT_BACKEND)),--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend --set image.tag=latest --set image.pullPolicy=Always,) \
 			--set provider.mode=$(PROVIDER_MODE) \
 			--set llm.baseUrl=$$MODEL_URL \
 			--set llm.model=$$MODEL_NAME \
@@ -590,9 +601,7 @@ else ifeq ($(MODEL),qwen3)
 		echo "Installing copilot-backend in llama_stack mode with qwen3 model settings..."; \
 		LLAMA_STACK_URL="http://$(LLAMA_STACK_DISTRIBUTION_NAME)-service:$(LLAMA_STACK_SERVICE_PORT)"; \
 		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
-			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
-			--set image.tag=latest \
-			--set image.pullPolicy=Always \
+			$(if $(filter true,$(BUILD_COPILOT_BACKEND)),--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend --set image.tag=latest --set image.pullPolicy=Always,) \
 			--set provider.mode=$(PROVIDER_MODE) \
 			--set llamaStack.baseUrl=$$LLAMA_STACK_URL \
 			--set llm.baseUrl=$$MODEL_URL \
@@ -603,9 +612,7 @@ else ifeq ($(MODEL),qwen3)
 	else \
 		echo "Installing copilot-backend in mcp_direct mode with qwen3 model settings..."; \
 		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
-			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
-			--set image.tag=latest \
-			--set image.pullPolicy=Always \
+			$(if $(filter true,$(BUILD_COPILOT_BACKEND)),--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend --set image.tag=latest --set image.pullPolicy=Always,) \
 			--set provider.mode=$(PROVIDER_MODE) \
 			--set llm.baseUrl=$$MODEL_URL \
 			--set llm.model=$$MODEL_NAME \
@@ -621,9 +628,7 @@ else
 		LLAMA_STACK_URL="http://$(LLAMA_STACK_DISTRIBUTION_NAME)-service:$(LLAMA_STACK_SERVICE_PORT)"; \
 		echo "Llama Stack URL: $$LLAMA_STACK_URL"; \
 		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
-			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
-			--set image.tag=latest \
-			--set image.pullPolicy=Always \
+			$(if $(filter true,$(BUILD_COPILOT_BACKEND)),--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend --set image.tag=latest --set image.pullPolicy=Always,) \
 			--set provider.mode=$(PROVIDER_MODE) \
 			--set llamaStack.baseUrl=$$LLAMA_STACK_URL \
 			$(if $(llm.baseUrl),--set llm.baseUrl=$(llm.baseUrl),) \
@@ -634,9 +639,7 @@ else
 	else \
 		echo "Installing copilot-backend in mcp_direct mode..."; \
 		helm -n $(NAMESPACE) upgrade --install copilot-backend $(COPILOT_BACKEND_CHART) \
-			--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend \
-			--set image.tag=latest \
-			--set image.pullPolicy=Always \
+			$(if $(filter true,$(BUILD_COPILOT_BACKEND)),--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/copilot-backend --set image.tag=latest --set image.pullPolicy=Always,) \
 			--set provider.mode=$(PROVIDER_MODE) \
 			$(if $(llm.baseUrl),--set llm.baseUrl=$(llm.baseUrl),) \
 			$(if $(llm.model),--set llm.model=$(llm.model),) \
