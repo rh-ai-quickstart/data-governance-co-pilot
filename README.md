@@ -1,6 +1,6 @@
-# Build AI-powered analytics with data governance controls 
+# Accelerate Retail AI analytics with data governance controls 
 
-AI assistant that bridges data governance policies with conversational analytics, ensuring compliance through natural language queries.
+Enhance retail discovery with an AI assistant that activates governance for loyalty analytics using secure, policy-aware natural language queries.
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ AI assistant that bridges data governance policies with conversational analytics
 
 ## Detailed Description
 
-The Data Governance Co-Pilot quickstart demonstrates how a Postgres-MCP-powered AI assistant can navigate the complex, high-stakes data landscape of a large e-commerce enterprise, where analysts often struggle to distinguish "gold-standard" metrics from deprecated or PII-heavy tables. By leveraging Model Context Protocol (MCP) to inspect metadata, verify certifications, and safely execute queries, the assistant transforms a risky, manual discovery process into a secure, automated workflow that ensures compliance and data accuracy.
+The Data Governance Co-Pilot quickstart enables retail organizations to operationalize customer loyalty data without the traditional friction of manual compliance reviews. It demonstrates how a Postgres-MCP-powered AI assistant can navigate the complex, high-stakes data landscape of a large e-commerce enterprise, where analysts often struggle to distinguish "gold-standard" metrics from deprecated or PII-heavy tables. By leveraging Model Context Protocol (MCP) to inspect metadata, verify certifications, and safely execute queries, the assistant transforms a risky, manual discovery process into a secure, automated workflow that ensures compliance and data accuracy. 
 
 Consider a typical e-commerce enterprise where analysts need to work with Customer Lifetime Value (LTV) metrics and transaction history. They must navigate:
 
@@ -473,18 +473,9 @@ oc logs -l serving.kserve.io/inferenceservice=<model-name> -n $NAMESPACE
 
 ## Tags
 
-**Industry**: Financial Services, Healthcare, Retail, Technology - Organizations with complex data governance requirements across multiple domains
+**Industry**: Retail
 
-**Product**: Red Hat OpenShift AI - Primary product for LLM inference and agent orchestration; Red Hat OpenShift - Container platform for deployment
+**Product**: Red Hat OpenShift AI
 
-**Use Case**: Data Governance and Compliance Automation - AI-powered natural language interface for navigating enterprise data policies; Database Administration - Simplifying schema exploration and metadata management; Policy Enforcement - Ensuring data access aligns with organizational compliance rules
+**Use Case**: Data Governance and Compliance Automation, Policy enforcement 
 
-**Business Challenge**: Data Discovery and Access Control - Helping analysts find certified data while avoiding deprecated or sensitive tables; Compliance and Risk Management - Maintaining governance standards in AI-driven data workflows
-
-**Product Line**: Red Hat OpenShift Platform Plus - Includes OpenShift AI and container platform capabilities
-
-**Topic**: Artificial Intelligence, Agentic AI, Model Context Protocol (MCP), Large Language Models (LLM), Database Management, Data Governance
-
-**Resource Type**: Quickstart - Full deployment with sample data and multiple configuration options
-
-**Sub Type**: AI Quickstart - Demonstrates agentic AI patterns with enterprise data integration
