@@ -97,6 +97,8 @@ _(Videos and demonstrations to be added)_
 
 5. **Deploy application**
 
+   IMPORTANT: The make command below will deploy the Nemotron model to your target cluster. If you already have a model running which you'd like to use (including local and remote models), see the 'Model Deployment Options' in [Optional technical section](#optional-technical-section) below for other deployment options.
+
    ```bash
    make install NAMESPACE=your-namespace \
      DEPLOY_MODEL=false \
@@ -109,8 +111,6 @@ _(Videos and demonstrations to be added)_
      llm.baseUrl=https://<model-endpoint>/v1 \
      llm.model=<model-resource-name>
    ```
-
-IMPORTANT: See the 'Model Deployment Options' in [Optional technical section](#optional-technical-section) below for other deployment options.
 
 ### Delete
 
