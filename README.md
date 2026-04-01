@@ -425,6 +425,20 @@ minio.password=<password>
 DEPLOY_PGADMIN=true            # Deploy pgAdmin for database management
 pgadmin.email=<email>
 pgadmin.password=<password>
+
+# Build vs. Quay image pull based deployment
+
+# By default, all components are deployed from pre-built images stored on Quay.
+# This provides several benefits, including faster and less error prone deployments and less compute demain on the target cluster.
+
+# You can optionally deploy the components so they are built directly from the source using OpenShift's buildconfigs and image streams. This option allows you to modify the source code and deploy your changes without requiring a full CI/CD pipeline.
+
+# Each deployment is controlled by a BUILD_X flag, which if set to true, triggers a cluster-side build for the component.
+
+BUILD_DATA_LOADER=true            # Build the data loader on the cluster vs. use Quay image
+BUILD_PG_AIRMAN_MCP=true          # Build the pg-airman-mcp component on the cluster
+BUILD_COPILOT_UI=true             # Build copilot-ui on the cluster
+BUILD_COPILOT_BACKEND=true        # Build copilot-backend on the cluster
 ```
 
 ### Troubleshooting
