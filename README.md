@@ -97,7 +97,7 @@ _(Videos and demonstrations to be added)_
 
 5. **Deploy application**
 
-   IMPORTANT: The make command below will deploy the Nemotron model to your target cluster. If you already have a model running which you'd like to use (including local and remote models), see the 'Model Deployment Options' in [Optional technical section](#optional-technical-section) below for other deployment options.
+   IMPORTANT: The make command below will NOT deploy the Nemotron model to your target cluster. You must provide the key, endpoint URL and model-resource-name to an existing nemotron model. There are several other deployment options, however, including those which will automatically deploy a model to your cluster. Please see the 'Model Deployment Options' in [Optional technical section](#optional-technical-section) below for all deployment options.
 
    ```bash
    make install NAMESPACE=your-namespace \
@@ -260,7 +260,7 @@ Both deployment modes ensure your organization maintains full control over its A
 
 The quickstart supports multiple deployment scenarios. Choose the option that matches your requirements:
 
-#### Option 1: Full Installation with Llama Stack Mode (Qwen3 Model)
+#### Option 1: Full Installation with Llama Stack Mode (installs Qwen3 Model in your cluster)
 
 **Note**: Llama Stack mode requires version 0.3.5.1+rhai0. Verify version before proceeding (see Prerequisites above).
 
@@ -281,7 +281,7 @@ This deployment:
 - Deploys PostgreSQL database with sample data
 - Configures all networking and routes
 
-#### Option 2: Llama Stack Mode with External Model
+#### Option 2: Llama Stack Mode with External Model; you must provide the details to an already installed qwen 3 model.
 
 Use this when connecting to an existing Qwen3-14B deployment:
 
@@ -303,7 +303,7 @@ make install NAMESPACE=your-namespace \
 - Must support OpenAI function calling format
 - See `helm/qwen3-model/` for required vLLM configuration flags
 
-#### Option 3: Full Installation with MCP Direct Mode (Nemotron Model)
+#### Option 3: Full Installation with MCP Direct Mode (installs Nemotron Model in your cluster)
 
 ```bash
 make install NAMESPACE=your-namespace \
@@ -321,7 +321,7 @@ This deployment:
 - Enables reasoning transparency features
 - Supports Nemotron's custom tool calling format
 
-#### Option 4: Full Installation with MCP Direct Mode (Qwen3 Model)
+#### Option 4: Full Installation with MCP Direct Mode (installs Qwen3 Model in your cluster)
 
 ```bash
 make install NAMESPACE=your-namespace \
@@ -333,7 +333,7 @@ make install NAMESPACE=your-namespace \
   postgres.databaseName=postgres
 ```
 
-#### Option 5: MCP Direct Mode with External Model
+#### Option 5: MCP Direct Mode with External Model; you must provide the details to an already installed nemotron model.
 
 **Using Nemotron**:
 ```bash
