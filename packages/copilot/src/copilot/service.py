@@ -163,6 +163,16 @@ async def startup_event():
     await copilot.initialize()
 
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup copilot on shutdown"""
+    global copilot
+    if copilot:
+        logger.info("Application shutting down - cleaning up resources...")
+        await copilot.cleanup()
+        logger.info("Cleanup complete")
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
