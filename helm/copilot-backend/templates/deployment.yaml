@@ -19,9 +19,22 @@ spec:
         app: {{ include "copilot-backend.name" . }}
         release: {{ .Release.Name }}
     spec:
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: copilot-backend
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        # Container-level security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          runAsNonRoot: true
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - name: http

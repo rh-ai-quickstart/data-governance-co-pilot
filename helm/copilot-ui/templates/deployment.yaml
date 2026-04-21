@@ -19,6 +19,11 @@ spec:
         app: {{ include "copilot-ui.name" . }}
         release: {{ .Release.Name }}
     spec:
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       volumes:
       - name: config
         configMap:
@@ -26,6 +31,14 @@ spec:
       containers:
       - name: copilot-ui
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        # Container-level security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          runAsNonRoot: true
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - name: http
