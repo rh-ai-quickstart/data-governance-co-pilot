@@ -8,6 +8,11 @@ metadata:
     chart: {{ include "copilot-ui.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
+  annotations:
+    # Enable cookie-based session affinity for load balancing across UI replicas
+    haproxy.router.openshift.io/disable_cookies: 'false'
+    haproxy.router.openshift.io/balance: roundrobin
+    haproxy.router.openshift.io/cookie_name: 'copilot-ui-route'
 spec:
   {{- if .Values.route.host }}
   host: {{ .Values.route.host }}

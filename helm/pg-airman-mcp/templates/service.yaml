@@ -10,6 +10,12 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 spec:
   type: {{ .Values.service.type }}
+  # ClientIP session affinity ensures each copilot-backend pod connects to same MCP pod
+  # This preserves MCP session state across requests from the same backend
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours
   ports:
     - port: {{ .Values.service.port }}
       targetPort: mcp

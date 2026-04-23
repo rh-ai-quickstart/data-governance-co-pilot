@@ -146,23 +146,85 @@ class MCPDirectProvider(LLMProvider):
         logger.info(f"Auto-detected OpenAI format for model: {config.get('llm_model')}")
         return "openai"
 
+    async def _retry_mcp_operation(self, operation, operation_name: str, max_retries: int = 3):
+        """
+        Retry an MCP operation with exponential backoff.
+
+        Handles transient failures when connecting to MCP server:
+        - Connection errors
+        - Temporary unavailability
+        - Network issues
+
+        Args:
+            operation: Async function to execute
+            operation_name: Name for logging
+            max_retries: Maximum number of retry attempts
+
+        Returns:
+            Result from the operation
+
+        Raises:
+            Last exception if all retries fail
+        """
+        import asyncio
+
+        delay = 1.0  # Initial delay in seconds
+        last_error = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                return await operation()
+            except Exception as e:
+                last_error = e
+                # Get error details - handle empty error messages
+                error_msg = str(e) if str(e) else repr(e)
+                error_type = type(e).__name__
+
+                if attempt < max_retries:
+                    logger.warning(
+                        f"MCP {operation_name} failed (attempt {attempt + 1}/{max_retries + 1}): "
+                        f"{error_type}: {error_msg}. Retrying in {delay}s..."
+                    )
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 10.0)  # Exponential backoff, max 10s
+                else:
+                    logger.error(
+                        f"MCP {operation_name} failed after {max_retries + 1} attempts: "
+                        f"{error_type}: {error_msg}",
+                        exc_info=True  # Include full traceback
+                    )
+                    raise
+
+        # Should never reach here, but for type safety
+        raise last_error
+
     async def initialize(self) -> None:
-        """Initialize MCP connection and discover tools"""
+        """Initialize MCP connection and discover tools with retry logic"""
         logger.info(f"Connecting to pg-airman-mcp at {self.mcp_server_url}...")
 
-        # Connect to MCP server - store contexts to keep connection alive
-        self._mcp_client_context = streamablehttp_client(self.mcp_server_url)
-        self._mcp_read, self._mcp_write, get_session_id = await self._mcp_client_context.__aenter__()
+        async def connect_to_mcp():
+            # Connect to MCP server - store contexts to keep connection alive
+            self._mcp_client_context = streamablehttp_client(self.mcp_server_url)
+            self._mcp_read, self._mcp_write, _ = await self._mcp_client_context.__aenter__()
 
-        self._mcp_session_context = ClientSession(self._mcp_read, self._mcp_write)
-        self.mcp_session = await self._mcp_session_context.__aenter__()
+            self._mcp_session_context = ClientSession(self._mcp_read, self._mcp_write)
+            self.mcp_session = await self._mcp_session_context.__aenter__()
 
-        await self.mcp_session.initialize()
-        logger.info("Connected to pg-airman-mcp server!")
+            await self.mcp_session.initialize()
+            logger.info("Connected to pg-airman-mcp server!")
 
-        # Discover available tools
-        tools_response = await self.mcp_session.list_tools()
-        logger.info(f"Discovered {len(tools_response.tools)} MCP tools")
+            # Discover available tools
+            tools_response = await self.mcp_session.list_tools()
+            logger.info(f"Discovered {len(tools_response.tools)} MCP tools")
+
+            return tools_response
+
+        # Retry connection with exponential backoff (covers pod startup scenarios)
+        tools_response = await self._retry_mcp_operation(
+            connect_to_mcp,
+            "connection",
+            max_retries=5  # Up to ~31 seconds total (1+2+4+8+10)
+        )
 
         # Convert MCP tools to OpenAI function calling format
         self.mcp_tools = self._convert_mcp_tools_to_openai(tools_response.tools)
@@ -417,6 +479,9 @@ class MCPDirectProvider(LLMProvider):
             query_start_time = time.time()
             total_llm_time = 0.0
             total_mcp_time = 0.0
+
+            # Log current MCP session ID to track if sessions are being reused
+            logger.info(f"Processing query with MCP session {id(self.mcp_session)}")
 
             yield {
                 "type": "query_start",
@@ -799,16 +864,46 @@ class MCPDirectProvider(LLMProvider):
                         "iteration": iteration
                     }
 
-                    # Execute tool via MCP with timeout
+                    # Execute tool via MCP with timeout and retry
                     mcp_start = time.time()
                     try:
-                        tool_result = await asyncio.wait_for(
-                            self.mcp_session.call_tool(tool_name, tool_args),
-                            timeout=300.0
+                        logger.debug(f"Executing tool {tool_name} using MCP session {id(self.mcp_session)}")
+
+                        async def execute_tool():
+                            return await asyncio.wait_for(
+                                self.mcp_session.call_tool(tool_name, tool_args),
+                                timeout=300.0
+                            )
+
+                        tool_result = await self._retry_mcp_operation(
+                            execute_tool,
+                            f"tool_call:{tool_name}",
+                            max_retries=2  # Quick retries for tool calls (1+2 seconds)
                         )
                     except asyncio.TimeoutError:
                         tool_result = {"error": f"Tool '{tool_name}' timed out after 5 minutes"}
                         logger.error(f"MCP tool call {tool_name} timed out")
+                    except Exception as e:
+                        error_msg = str(e)
+                        error_type = type(e).__name__
+                        # Check if MCP session is terminated or streams are closed
+                        if "Session terminated" in error_msg or "404" in error_msg or "ClosedResourceError" in error_type:
+                            logger.warning(f"MCP session terminated, attempting to reconnect and retry {tool_name}...")
+                            try:
+                                # Reconnect to MCP server (creates new session)
+                                await self._reconnect_mcp()
+                                # Retry the tool call with new session
+                                tool_result = await asyncio.wait_for(
+                                    self.mcp_session.call_tool(tool_name, tool_args),
+                                    timeout=300.0
+                                )
+                                logger.info(f"Successfully reconnected and executed {tool_name}")
+                            except Exception as reconnect_error:
+                                tool_result = {"error": f"Tool '{tool_name}' failed after reconnection: {str(reconnect_error)}"}
+                                logger.error(f"MCP tool call {tool_name} failed even after reconnection: {reconnect_error}")
+                        else:
+                            tool_result = {"error": f"Tool '{tool_name}' failed: {error_msg}"}
+                            logger.error(f"MCP tool call {tool_name} failed after retries: {e}")
 
                     mcp_elapsed = time.time() - mcp_start
                     total_mcp_time += mcp_elapsed
@@ -849,6 +944,18 @@ class MCPDirectProvider(LLMProvider):
                 "message": str(e),
                 "traceback": traceback.format_exc()
             }
+
+    async def _reconnect_mcp(self):
+        """
+        Reconnect to MCP server after connection loss.
+
+        This recreates the MCP session. While it works, it does trigger warnings
+        about task boundaries due to cleaning up contexts from the startup task.
+        """
+        old_session_id = id(self.mcp_session) if self.mcp_session else None
+        logger.warning(f"MCP connection lost (old session: {old_session_id}), attempting to reconnect...")
+        await self.initialize()
+        logger.info(f"MCP reconnection successful! New session: {id(self.mcp_session)}")
 
     async def cleanup(self) -> None:
         """Cleanup MCP session and HTTP client"""

@@ -9,6 +9,11 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
   annotations:
+    # Cookie-based session affinity for load balancing across backend replicas
+    haproxy.router.openshift.io/disable_cookies: 'false'
+    haproxy.router.openshift.io/balance: roundrobin
+    haproxy.router.openshift.io/cookie_name: 'copilot-backend-route'
+    # Timeout configurations for long-running LLM queries
     haproxy.router.openshift.io/timeout: {{ .Values.route.timeout | default "90s" | quote }}
     haproxy.router.openshift.io/timeout-tunnel: {{ .Values.route.timeout | default "90s" | quote }}
     haproxy.router.openshift.io/timeout-check: "10s"  # Health check timeout

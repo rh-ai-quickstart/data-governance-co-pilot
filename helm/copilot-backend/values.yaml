@@ -1,4 +1,4 @@
-replicaCount: 1
+replicaCount: 2
 
 image:
   repository: quay.io/rh-ai-quickstart/copilot-backend
@@ -70,9 +70,11 @@ resources:
   limits:
     cpu: 1000m
     memory: 1Gi
+    ephemeral-storage: 4Gi
   requests:
     cpu: 500m
     memory: 512Mi
+    ephemeral-storage: 2Gi
 
 autoscaling:
   enabled: false

@@ -1,4 +1,4 @@
-replicaCount: 1
+replicaCount: 2
 
 image:
   repository: quay.io/rh-ai-quickstart/copilot-ui
@@ -24,9 +24,11 @@ resources:
   limits:
     cpu: 500m
     memory: 256Mi
+    ephemeral-storage: 2Gi
   requests:
     cpu: 100m
     memory: 128Mi
+    ephemeral-storage: 1Gi
 
 livenessProbe:
   httpGet:

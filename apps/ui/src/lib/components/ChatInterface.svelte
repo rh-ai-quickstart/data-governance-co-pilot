@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { getBackendUrl } from '$lib/config';
+	import { retryFetchSSE } from '$lib/utils/retryFetch';
 	import MessageList from './MessageList.svelte';
 	import ChatInput from './ChatInput.svelte';
 	import ChatHistory from './ChatHistory.svelte';
@@ -46,14 +47,20 @@
 	async function fetchProviderInfo() {
 		try {
 			const backendUrl = getBackendUrl();
-			const response = await fetch(`${backendUrl}/provider/info`);
+			const response = await retryFetchSSE(
+				`${backendUrl}/provider/info`,
+				undefined,
+				(attempt, error) => {
+					console.warn(`[ChatInterface] Provider info retry ${attempt}/7: ${error.message}`);
+				}
+			);
 			if (response.ok) {
 				const data = await response.json();
 				providerMode = data.provider_mode;
 				console.log(`[ChatInterface] Provider mode: ${providerMode}`);
 			}
 		} catch (error) {
-			console.error('[ChatInterface] Failed to fetch provider info:', error);
+			console.error('[ChatInterface] Failed to fetch provider info after retries:', error);
 		}
 	}
 
@@ -183,15 +190,27 @@
 			};
 			console.log('[ChatInterface] Starting SSE stream with body:', requestBody);
 
-			// Use fetch with streaming for SSE
-			const response = await fetch(`${backendUrl}/query/stream`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'Accept': 'text/event-stream'
+			// Use fetch with automatic retry for SSE connection
+			const response = await retryFetchSSE(
+				`${backendUrl}/query/stream`,
+				{
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'Accept': 'text/event-stream'
+					},
+					body: JSON.stringify(requestBody)
 				},
-				body: JSON.stringify(requestBody)
-			});
+				(attempt, error) => {
+					console.warn(`[ChatInterface] Retry attempt ${attempt}/7: ${error.message}`);
+					// Update assistant message to show retry status
+					const retryMessage = messages[messages.length - 1];
+					if (retryMessage && retryMessage.role === 'assistant') {
+						retryMessage.content = `Connecting to backend... (attempt ${attempt}/7)`;
+						messages = [...messages]; // Trigger reactivity
+					}
+				}
+			);
 
 			if (!response.ok) {
 				console.error('[ChatInterface] Response not OK:', response.status, response.statusText);
