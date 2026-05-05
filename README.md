@@ -1,4 +1,4 @@
-# Accelerate Retail AI analytics with data governance controls 
+# Build governance aware retail analytics with EDB Postgres AI
 
 Enhance retail discovery with an AI assistant that activates governance for loyalty analytics using secure, policy-aware natural language queries.
 

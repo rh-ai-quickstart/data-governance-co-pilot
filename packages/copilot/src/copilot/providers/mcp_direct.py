@@ -545,6 +545,7 @@ class MCPDirectProvider(LLMProvider):
                         "stream": True
                     }
 
+                    #logger.debug(f"Messages being sent to LLM:\n{json.dumps(messages, indent=2)}")
                     stream = await self.llm_client.chat.completions.create(**api_params)
 
                     # Stream response while handling thinking content

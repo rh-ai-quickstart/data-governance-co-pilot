@@ -56,12 +56,7 @@ spec:
                   name: pg-airman-mcp-secret
                   key: DATABASE_URI
           resources:
-            requests:
-              cpu: {{ .Values.resources.requests.cpu }}
-              memory: {{ .Values.resources.requests.memory }}
-            limits:
-              cpu: {{ .Values.resources.limits.cpu }}
-              memory: {{ .Values.resources.limits.memory }}
+            {{- toYaml .Values.resources | nindent 12 }}
           {{- if or (eq .Values.mcp.transport "sse") (eq .Values.mcp.transport "streamable-http") }}
           livenessProbe:
             tcpSocket:

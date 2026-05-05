@@ -1,0 +1,50 @@
+{{- $serviceNetwork := "172.30.0.0/16" }}
+{{- $podNetwork := "10.128.0.0/14" }}
+{{- if .Capabilities.APIVersions.Has "config.openshift.io/v1" }}
+{{- $clusterNetwork := (lookup "config.openshift.io/v1" "Network" "" "cluster") }}
+{{- if $clusterNetwork }}
+{{- if $clusterNetwork.status.serviceNetwork }}
+{{- $serviceNetwork = index $clusterNetwork.status.serviceNetwork 0 }}
+{{- end }}
+{{- if $clusterNetwork.status.clusterNetwork }}
+{{- $podNetwork = (index $clusterNetwork.status.clusterNetwork 0).cidr }}
+{{- end }}
+{{- end }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: copilot-ui-netpol
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: copilot-ui
+    release: {{ .Release.Name }}
+  annotations:
+    service-network-cidr: "{{ $serviceNetwork }}"
+spec:
+  podSelector:
+    matchLabels:
+      app: copilot-ui
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # TEMPORARY: Allow all ingress for troubleshooting
+    - {}
+
+  egress:
+    # 1. Allow DNS to any destination (permissive for troubleshooting)
+    - ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+
+    # 2. Allow traffic to copilot-backend service
+    - to:
+      - ipBlock:
+          cidr: {{ $serviceNetwork }}
+      ports:
+      - protocol: TCP
+        port: 8080

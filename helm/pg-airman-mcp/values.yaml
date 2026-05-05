@@ -10,7 +10,7 @@ postgres:
 
 # MCP Server configuration
 mcp:
-  # Access mode: "restricted" (read-only, production) or "unrestricted" (read-write, development)
+  # Access mode: "restricted" (read-only, suitable for production) or "unrestricted" (read-write, suitable for development)
   accessMode: restricted
 
   # Transport mode: "stdio", "sse", or "streamable-http"
