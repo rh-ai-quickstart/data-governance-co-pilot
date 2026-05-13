@@ -72,7 +72,7 @@ _(Videos and demonstrations to be added)_
 
 2. **Clone the Repository**:
    ```bash
-   git clone https://github.com/your-org/data-governance-co-pilot.git
+   git clone https://github.com/rh-ai-quickstart/data-governance-co-pilot
    cd data-governance-co-pilot/helm
    ```
 
