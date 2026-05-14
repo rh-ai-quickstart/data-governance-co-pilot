@@ -64,6 +64,10 @@ spec:
           value: "{{ .Values.llm.maxContextLength }}"
         - name: LLM_TOOL_CALL_FORMAT
           value: "{{ .Values.llm.toolCallFormat }}"
+        - name: LLM_TEMPERATURE
+          value: "{{ .Values.llm.temperature }}"
+        - name: LLM_MIN_P
+          value: "{{ .Values.llm.minP }}"
         - name: LLM_API_KEY
           valueFrom:
             secretKeyRef:

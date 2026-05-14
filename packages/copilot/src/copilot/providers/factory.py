@@ -28,11 +28,15 @@ def create_provider(governance_policy: str | None = None) -> LLMProvider:
             LLM_API_KEY: API key (optional)
             LLM_MAX_CONTEXT_LENGTH: Context window size
             LLM_TOOL_CALL_FORMAT: Tool calling format (auto/nemotron/openai)
+            LLM_TEMPERATURE: Sampling temperature (0.0-2.0, default: 0.1)
+            LLM_MIN_P: Min-P sampling threshold (0.0-1.0, default: 0.1)
             PG_AIRMAN_MCP_SERVICE_PORT: MCP server endpoint
 
         Llama Stack mode:
             LLAMA_STACK_BASE_URL: Llama Stack endpoint URL
             LLAMA_STACK_MODEL: Model identifier (vllm-inference/<name> format)
+            LLM_TEMPERATURE: Sampling temperature (0.0-2.0, default: 0.1)
+            LLM_MIN_P: Min-P sampling threshold (0.0-1.0, default: 0.1)
             PG_AIRMAN_MCP_SERVICE_URL: MCP server endpoint
 
     Args:
@@ -55,6 +59,8 @@ def create_provider(governance_policy: str | None = None) -> LLMProvider:
             "llm_api_key": os.getenv("LLM_API_KEY", "not-needed"),
             "llm_max_context_length": os.getenv("LLM_MAX_CONTEXT_LENGTH", "32768"),
             "llm_tool_call_format": os.getenv("LLM_TOOL_CALL_FORMAT", "auto"),
+            "llm_temperature": float(os.getenv("LLM_TEMPERATURE", "0.1")),
+            "llm_min_p": float(os.getenv("LLM_MIN_P", "0.1")),
             "mcp_server_url": os.getenv("PG_AIRMAN_MCP_SERVICE_PORT", "http://pg-airman-mcp-service:8000")
         }
 
@@ -62,6 +68,8 @@ def create_provider(governance_policy: str | None = None) -> LLMProvider:
         logger.info(f"  LLM Base URL: {config['llm_base_url']}")
         logger.info(f"  LLM Model: {config['llm_model']}")
         logger.info(f"  Tool Call Format: {config['llm_tool_call_format']}")
+        logger.info(f"  Temperature: {config['llm_temperature']}")
+        logger.info(f"  Min-P: {config['llm_min_p']}")
         logger.info(f"  MCP Server: {config['mcp_server_url']}")
 
         return MCPDirectProvider(config=config, governance_policy=governance_policy)
@@ -70,12 +78,16 @@ def create_provider(governance_policy: str | None = None) -> LLMProvider:
         config = {
             "llama_stack_base_url": os.getenv("LLAMA_STACK_BASE_URL", "http://copilot-llama-stack:8000"),
             "llama_stack_model": os.getenv("LLAMA_STACK_MODEL", "vllm-inference/redhataillama-31-8b-instruct"),
+            "llm_temperature": float(os.getenv("LLM_TEMPERATURE", "0.1")),
+            "llm_min_p": float(os.getenv("LLM_MIN_P", "0.1")),
             "mcp_server_url": os.getenv("PG_AIRMAN_MCP_SERVICE_URL", "http://pg-airman-mcp-service:8000")
         }
 
         logger.info("Llama Stack provider configuration:")
         logger.info(f"  Llama Stack Base URL: {config['llama_stack_base_url']}")
         logger.info(f"  Llama Stack Model: {config['llama_stack_model']}")
+        logger.info(f"  Temperature: {config['llm_temperature']}")
+        logger.info(f"  Min-P: {config['llm_min_p']}")
         logger.info(f"  MCP Server: {config['mcp_server_url']}")
 
         return LlamaStackProvider(config=config, governance_policy=governance_policy)

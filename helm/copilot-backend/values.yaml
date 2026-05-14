@@ -61,6 +61,20 @@ llm:
   # Only used in MCP-Direct mode (Llama Stack always uses OpenAI format)
   toolCallFormat: "auto"
 
+  # Sampling Parameters
+  # Temperature: Controls randomness in token sampling (0.0 = deterministic, 2.0 = very random)
+  # Low values (0.1-0.4) recommended for SQL generation to ensure correctness
+  # Higher values (0.5-1.0) can be used for more creative text generation
+  # Default: 0.1 (strong determinism for reliable code generation)
+  temperature: 0.1
+
+  # Min-P: Minimum probability threshold relative to the top token
+  # Keeps only tokens whose probability is at least this fraction of the top token
+  # Adapts to model confidence (unlike top-k which uses fixed cutoff)
+  # Range: 0.0-1.0, typical values: 0.05-0.2
+  # Default: 0.1 (keeps tokens within 10% of top token probability)
+  minP: 0.1
+
 # Logging Configuration
 logging:
   # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL

@@ -36,6 +36,8 @@ class LlamaStackProvider(LLMProvider):
             config: Configuration dict with keys:
                 - llama_stack_base_url: Llama Stack endpoint URL
                 - llama_stack_model: Model identifier (vllm-inference/<name> format)
+                - llm_temperature: Sampling temperature (0.0-2.0)
+                - llm_min_p: Min-P sampling threshold (0.0-1.0)
                 - mcp_server_url: MCP server endpoint for toolgroup registration
             governance_policy: Optional governance policy text to include in agent instructions
         """
@@ -46,6 +48,10 @@ class LlamaStackProvider(LLMProvider):
         self.llama_stack_base_url = config.get("llama_stack_base_url", "http://copilot-llama-stack:8000")
         self.llama_stack_model = config.get("llama_stack_model", "vllm-inference/redhataillama-31-8b-instruct")
         self.mcp_server_url = config.get("mcp_server_url", "http://pg-airman-mcp-service:8000")
+
+        # Sampling Parameters
+        self.temperature = float(config.get("llm_temperature", 0.1))
+        self.min_p = float(config.get("llm_min_p", 0.1))
 
         # Llama Stack client and agent state
         self.client = None
@@ -124,9 +130,12 @@ class LlamaStackProvider(LLMProvider):
                     "instructions": self.get_system_prompt(enable_reasoning=True),
                     "toolgroups": [self.toolgroup_id],
                     "tool_choice": "auto",
+                    # Llama Stack passes sampling_params directly to underlying inference engine (vLLM)
+                    # Unlike OpenAI client (used in MCP-Direct), we can pass vLLM-specific params like min_p directly
                     "sampling_params": {
                         "max_tokens": 2048,
-                        "temperature": 0.7,
+                        "temperature": self.temperature,
+                        "min_p": self.min_p,
                     },
                 }
             )
@@ -693,9 +702,11 @@ class LlamaStackProvider(LLMProvider):
                         "instructions": self.get_system_prompt(enable_reasoning=True),
                         "toolgroups": [self.toolgroup_id],
                         "tool_choice": "auto",
+                        # Llama Stack passes sampling_params directly to underlying inference engine (vLLM)
                         "sampling_params": {
                             "max_tokens": 2048,
-                            "temperature": 0.7,
+                            "temperature": self.temperature,
+                            "min_p": self.min_p,
                         }
                     }
                 )

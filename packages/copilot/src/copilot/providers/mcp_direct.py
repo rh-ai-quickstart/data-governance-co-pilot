@@ -87,6 +87,8 @@ class MCPDirectProvider(LLMProvider):
                 - llm_api_key: API key (optional for vLLM)
                 - llm_max_context_length: Context window size
                 - llm_tool_call_format: Tool calling format (auto/nemotron/openai)
+                - llm_temperature: Sampling temperature (0.0-2.0)
+                - llm_min_p: Min-P sampling threshold (0.0-1.0)
                 - mcp_server_url: MCP server endpoint
             governance_policy: Optional governance policy text to include in system prompt
         """
@@ -98,6 +100,10 @@ class MCPDirectProvider(LLMProvider):
         self.llm_model = config.get("llm_model", "nvidia/nemotron-nano-9b-v2")
         self.llm_api_key = config.get("llm_api_key", "not-needed")
         self.max_context_length = int(config.get("llm_max_context_length", "32768"))
+
+        # Sampling Parameters
+        self.temperature = float(config.get("llm_temperature", 0.1))
+        self.min_p = float(config.get("llm_min_p", 0.1))
 
         # Model format detection
         self.tool_call_format = self._detect_tool_call_format(config)
@@ -540,9 +546,14 @@ class MCPDirectProvider(LLMProvider):
                         "tools": self.mcp_tools,
                         "tool_choice": "auto",
                         "max_tokens": 2048,
-                        "temperature": 0.1,
-                        "top_p": 0.95,
-                        "stream": True
+                        "temperature": self.temperature,
+                        "stream": True,
+                        # Pass vLLM-specific parameters via extra_body
+                        # min_p is not part of standard OpenAI API but supported by vLLM
+                        # See: https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html
+                        "extra_body": {
+                            "min_p": self.min_p
+                        }
                     }
 
                     #logger.debug(f"Messages being sent to LLM:\n{json.dumps(messages, indent=2)}")
