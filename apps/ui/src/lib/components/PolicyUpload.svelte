@@ -33,7 +33,9 @@
 	async function checkPolicyStatus() {
 		try {
 			const backendUrl = getBackendUrl();
-			const response = await fetch(`${backendUrl}/policy/status`);
+			const response = await fetch(`${backendUrl}/policy/status`, {
+				credentials: 'include'
+			});
 			if (response.ok) {
 				const data = await response.json();
 				hasPolicyState = data.has_policy;
@@ -138,7 +140,8 @@
 				headers: {
 					'Content-Type': 'application/json'
 				},
-				body: JSON.stringify(requestBody)
+				body: JSON.stringify(requestBody),
+				credentials: 'include'
 			});
 
 			if (!response.ok) {
@@ -185,7 +188,8 @@
 		try {
 			const backendUrl = getBackendUrl();
 			const response = await fetch(`${backendUrl}/policy`, {
-				method: 'DELETE'
+				method: 'DELETE',
+				credentials: 'include'
 			});
 
 			if (!response.ok) {

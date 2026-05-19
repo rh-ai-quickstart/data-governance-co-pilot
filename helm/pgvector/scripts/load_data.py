@@ -210,6 +210,51 @@ def populate_fact_order_payments(conn, csv_path):
     conn.commit()
     print(f"Loaded {len(tuples)} payment records")
 
+def create_readonly_user(conn, readonly_password):
+    """
+    Create read-only database user for MCP server.
+
+    This user has SELECT access to tables/views but cannot modify data or schema.
+    Purpose: Defense-in-depth security - limits blast radius if MCP server is compromised.
+
+    Note: Does NOT auto-grant on future tables - privileges must be re-granted if schema changes.
+    """
+    cursor = conn.cursor()
+
+    # Check if user exists
+    cursor.execute("SELECT 1 FROM pg_catalog.pg_user WHERE usename = 'mcp_readonly'")
+    user_exists = cursor.fetchone() is not None
+
+    if not user_exists:
+        # Create user with password
+        cursor.execute(f"CREATE USER mcp_readonly WITH PASSWORD %s", (readonly_password,))
+        print("Created user: mcp_readonly")
+    else:
+        # Update password for existing user
+        cursor.execute(f"ALTER USER mcp_readonly WITH PASSWORD %s", (readonly_password,))
+        print("Updated password for existing user: mcp_readonly")
+
+    # Grant connection to database
+    cursor.execute("GRANT CONNECT ON DATABASE postgres TO mcp_readonly")
+
+    # Grant schema usage
+    cursor.execute("GRANT USAGE ON SCHEMA public TO mcp_readonly")
+
+    # Grant SELECT on all existing tables and views
+    cursor.execute("GRANT SELECT ON ALL TABLES IN SCHEMA public TO mcp_readonly")
+
+    # Grant SELECT on all existing sequences
+    cursor.execute("GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO mcp_readonly")
+
+    # Grant pg_read_all_stats role for query analysis tools
+    cursor.execute("GRANT pg_read_all_stats TO mcp_readonly")
+
+    conn.commit()
+    print("✅ Read-only user configured successfully")
+    print("   - Can: SELECT from existing tables/views, read system catalogs, run EXPLAIN, read pg_stat_statements")
+    print("   - Cannot: INSERT/UPDATE/DELETE data, CREATE/ALTER/DROP schema, run COMMENT ON")
+    print("   - Note: If new tables are added, re-run this script to grant SELECT on them")
+
 def main():
     import os
 
@@ -217,6 +262,12 @@ def main():
     user = os.environ.get("POSTGRES_USER")
     password = os.environ.get("POSTGRES_PASSWORD")
     dbname = os.environ.get("POSTGRES_DB")
+    readonly_password = os.environ.get("POSTGRES_READONLY_PASSWORD")
+
+    # Validate required environment variables
+    if not readonly_password:
+        print("ERROR: POSTGRES_READONLY_PASSWORD environment variable is required")
+        sys.exit(1)
 
     print(f"Connecting to PostgreSQL at {host}...")
 
@@ -242,6 +293,9 @@ def main():
 
         print("Creating views...")
         create_views(conn)
+
+        print("Creating read-only user for MCP server...")
+        create_readonly_user(conn, readonly_password)
 
         print("Data loading complete!")
 

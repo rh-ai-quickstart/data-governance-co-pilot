@@ -42,3 +42,5 @@ spec:
                 secretKeyRef:
                   name: vector-database
                   key: DATABASE_NAME
+            - name: POSTGRES_READONLY_PASSWORD
+              value: "{{ .Values.postgres.readonlyPassword }}"

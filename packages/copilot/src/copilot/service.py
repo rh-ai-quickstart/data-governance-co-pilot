@@ -134,12 +134,22 @@ app = FastAPI(
 )
 
 # Add CORS middleware for Svelte frontend
+# SECURITY: Restrict origins when using credentials to prevent CSRF attacks
+# In production, set COPILOT_UI_ORIGIN environment variable to your UI's actual origin
+allowed_origins = os.getenv("COPILOT_UI_ORIGIN", "").split(",") if os.getenv("COPILOT_UI_ORIGIN") else ["*"]
+if allowed_origins == ["*"] and os.getenv("COPILOT_ALLOW_ALL_ORIGINS") != "true":
+    logger.warning(
+        "SECURITY WARNING: CORS configured with wildcard origins and credentials enabled. "
+        "Set COPILOT_UI_ORIGIN environment variable to restrict access. "
+        "Example: COPILOT_UI_ORIGIN=https://copilot-ui-namespace.apps.cluster.com"
+    )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["POST", "GET", "DELETE", "OPTIONS"],  # Restrict to only needed methods
+    allow_headers=["Content-Type", "Accept"],  # Restrict to only needed headers
 )
 
 # Global copilot instance

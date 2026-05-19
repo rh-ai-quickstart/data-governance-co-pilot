@@ -80,14 +80,14 @@ MINIMUM_PASSWORD_LENGTH = 8
 help:
 	@echo "Available targets:"
 	@echo "  install       - Installs quickstart and supporting resources"
-	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName"
+	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, postgres.readonlyPassword"
 	@echo "                  Optional: DEPLOY_MODEL=true, DEPLOY_MINIO=true, DEPLOY_PGADMIN=true, MODEL=nemotron|qwen3, PROVIDER_MODE=mcp_direct|llama_stack"
 	@echo "                  If DEPLOY_MINIO=true: minio.userId, minio.password are required"
 	@echo "                  If DEPLOY_PGADMIN=true: pgadmin.email, pgadmin.password are required"
 	@echo "                  Example (Nemotron): make install NAMESPACE=myns MODEL=nemotron DEPLOY_MODEL=true PROVIDER_MODE=mcp_direct ..."
 	@echo "                  Example (Qwen3): make install NAMESPACE=myns MODEL=qwen3 PROVIDER_MODE=llama_stack llm.apiKey=sk-xxx ..."
 	@echo "  pg-airman-mcp-install - Installs pg-airman-mcp MCP server"
-	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName"
+	@echo "                  Required: NAMESPACE, postgres.readonlyPassword"
 	@echo "                  Optional: BUILD_PG_AIRMAN_MCP=true (build on cluster, default pulls from Quay)"
 	@echo "                  Optional: pgairman.accessMode (default: restricted)"
 	@echo "                  Default: Pulls quay.io/rh-ai-quickstart/pg-airman-mcp:latest"
@@ -131,9 +131,10 @@ help:
 	@echo "                             NOTE: Nemotron is incompatible with llama_stack mode"
 	@echo "  model.storage.s3Bucket   - S3 bucket path (optional, overrides default OCI image for nemotron)"
 	@echo "  model.storage.uri        - Custom OCI/URI path (optional, overrides default OCI image for nemotron)"
-	@echo "  postgres.userId          - PostgreSQL user ID (required)"
-	@echo "  postgres.password        - PostgreSQL password (required)"
+	@echo "  postgres.userId          - PostgreSQL superuser ID (required for database setup)"
+	@echo "  postgres.password        - PostgreSQL superuser password (required for database setup)"
 	@echo "  postgres.databaseName    - PostgreSQL database name (required)"
+	@echo "  postgres.readonlyPassword - Password for mcp_readonly user (required, used by MCP server)"
 	@echo "  minio.userId             - User ID to use for minio installation (required if DEPLOY_MINIO=true)"
 	@echo "  minio.password           - Password to use for minio installation (required if DEPLOY_MINIO=true)"
 	@echo "  pgadmin.email            - pgAdmin login email (required if DEPLOY_PGADMIN=true)"
@@ -184,6 +185,11 @@ check-postgres-credentials:
 	fi
 	@if [ -z "$(postgres.databaseName)" ]; then \
 		echo "Error: postgres.databaseName must be set."; \
+		exit 1; \
+	fi
+	@if [ -z "$(postgres.readonlyPassword)" ]; then \
+		echo "Error: postgres.readonlyPassword must be set."; \
+		echo "This password is used for the mcp_readonly database user (used by MCP server)."; \
 		exit 1; \
 	fi
 
@@ -320,6 +326,7 @@ ifeq ($(BUILD_DATA_LOADER),true)
 		--set postgres.userId=$(postgres.userId) \
 		--set postgres.password=$(postgres.password) \
 		--set postgres.databaseName=$(postgres.databaseName) \
+		--set postgres.readonlyPassword=$(postgres.readonlyPassword) \
 		--set dataLoader.image=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/pgvector-data-loader:latest \
 		--timeout 10m
 else
@@ -329,6 +336,7 @@ else
 		--set postgres.userId=$(postgres.userId) \
 		--set postgres.password=$(postgres.password) \
 		--set postgres.databaseName=$(postgres.databaseName) \
+		--set postgres.readonlyPassword=$(postgres.readonlyPassword) \
 		--timeout 10m
 endif
 	@echo "Waiting for data loading job to complete..."
@@ -387,8 +395,8 @@ ifeq ($(PROVIDER_MODE),llama_stack)
 		--set image.pullPolicy=Always \
 		--set postgres.host=pgvector-0.pgvector-postgres-service \
 		--set postgres.port=5432 \
-		--set postgres.user=$(postgres.userId) \
-		--set postgres.password=$(postgres.password) \
+		--set postgres.user=mcp_readonly \
+		--set postgres.password=$(postgres.readonlyPassword) \
 		--set postgres.database=$(postgres.databaseName) \
 		--set mcp.transport=sse \
 		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
@@ -401,8 +409,8 @@ else
 		--set image.pullPolicy=Always \
 		--set postgres.host=pgvector-0.pgvector-postgres-service \
 		--set postgres.port=5432 \
-		--set postgres.user=$(postgres.userId) \
-		--set postgres.password=$(postgres.password) \
+		--set postgres.user=mcp_readonly \
+		--set postgres.password=$(postgres.readonlyPassword) \
 		--set postgres.database=$(postgres.databaseName) \
 		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
 		--timeout 5m
@@ -415,8 +423,8 @@ ifeq ($(PROVIDER_MODE),llama_stack)
 	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
 		--set postgres.host=pgvector-0.pgvector-postgres-service \
 		--set postgres.port=5432 \
-		--set postgres.user=$(postgres.userId) \
-		--set postgres.password=$(postgres.password) \
+		--set postgres.user=mcp_readonly \
+		--set postgres.password=$(postgres.readonlyPassword) \
 		--set postgres.database=$(postgres.databaseName) \
 		--set mcp.transport=sse \
 		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
@@ -426,8 +434,8 @@ else
 	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
 		--set postgres.host=pgvector-0.pgvector-postgres-service \
 		--set postgres.port=5432 \
-		--set postgres.user=$(postgres.userId) \
-		--set postgres.password=$(postgres.password) \
+		--set postgres.user=mcp_readonly \
+		--set postgres.password=$(postgres.readonlyPassword) \
 		--set postgres.database=$(postgres.databaseName) \
 		--set mcp.accessMode=$(if $(pgairman.accessMode),$(pgairman.accessMode),restricted) \
 		--timeout 5m
@@ -803,6 +811,11 @@ endif
 	@echo "copilot-ui installation complete."
 	@echo "Service URL (internal): http://copilot-ui:8080"
 	@echo "Public UI URL: https://$$(oc get route copilot-ui -o jsonpath='{.spec.host}' -n $(NAMESPACE))"
+	@echo "Configuring CORS security: setting allowed origin for copilot-backend..."
+	@UI_ORIGIN="https://$$(oc get route copilot-ui -o jsonpath='{.spec.host}' -n $(NAMESPACE))"; \
+	echo "Setting COPILOT_UI_ORIGIN to: $$UI_ORIGIN"; \
+	oc set env deployment/copilot-backend COPILOT_UI_ORIGIN="$$UI_ORIGIN" -n $(NAMESPACE)
+	@echo "CORS configuration complete - backend will only accept requests from UI origin"
 
 # Uninstall copilot-ui
 .PHONY: copilot-ui-uninstall

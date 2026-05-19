@@ -1,17 +1,21 @@
 applicationName: pg-airman-mcp
 
 # PostgreSQL connection details
+# SECURITY: Uses read-only user (mcp_readonly) for defense-in-depth
+# This user can SELECT from tables/views and read system catalogs, but cannot modify data or schema
 postgres:
   host: pgvector-0.pgvector-postgres-service
   port: 5432
-  user: <postgres userId> # provided via postgres.user parameter
-  password: <postgres password> # provided via postgres.password parameter
+  user: mcp_readonly # Read-only user created by load_data.py (was: postgres superuser)
+  password: <postgres readonly password> # provided via postgres.password parameter
   database: <postgres database> # provided via postgres.database parameter
 
 # MCP Server configuration
 mcp:
   # Access mode: "restricted" (read-only, suitable for production) or "unrestricted" (read-write, suitable for development)
   accessMode: restricted
+
+  allowCommentInRestricted: false
 
   # Transport mode: "stdio", "sse", or "streamable-http"
   # For Kubernetes deployment, streamable-http provides simpler request-response pattern

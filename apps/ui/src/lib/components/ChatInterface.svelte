@@ -49,7 +49,9 @@
 			const backendUrl = getBackendUrl();
 			const response = await retryFetchSSE(
 				`${backendUrl}/provider/info`,
-				undefined,
+				{
+					credentials: 'include'  // Enable cookie-based session affinity
+				},
 				(attempt, error) => {
 					console.warn(`[ChatInterface] Provider info retry ${attempt}/7: ${error.message}`);
 				}
@@ -199,7 +201,8 @@
 						'Content-Type': 'application/json',
 						'Accept': 'text/event-stream'
 					},
-					body: JSON.stringify(requestBody)
+					body: JSON.stringify(requestBody),
+					credentials: 'include'  // Enable cookie-based session affinity (routes to same backend pod)
 				},
 				(attempt, error) => {
 					console.warn(`[ChatInterface] Retry attempt ${attempt}/7: ${error.message}`);

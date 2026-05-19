@@ -45,6 +45,11 @@ spec:
         - name: LOG_LEVEL
           value: "{{ .Values.logging.level }}"
 
+        # CORS Security Configuration
+        # Restrict which origins can make authenticated requests to prevent CSRF
+        - name: COPILOT_UI_ORIGIN
+          value: "{{ .Values.cors.allowedOrigins }}"
+
         # Provider Configuration
         - name: COPILOT_PROVIDER_MODE
           value: "{{ .Values.provider.mode }}"

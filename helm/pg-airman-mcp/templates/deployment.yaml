@@ -55,6 +55,8 @@ spec:
                 secretKeyRef:
                   name: pg-airman-mcp-secret
                   key: DATABASE_URI
+            - name: ALLOW_COMMENT_IN_RESTRICTED
+              value: "{{ .Values.mcp.allowCommentInRestricted }}"
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           {{- if or (eq .Values.mcp.transport "sse") (eq .Values.mcp.transport "streamable-http") }}

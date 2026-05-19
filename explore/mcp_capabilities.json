@@ -1,0 +1,300 @@
+{
+  "server_info": {
+    "name": "pg-airman-mcp",
+    "version": "1.26.0",
+    "protocol_version": "2025-11-25"
+  },
+  "capabilities": {
+    "tools": {
+      "supported": true,
+      "list_changed": false
+    },
+    "prompts": {
+      "supported": false,
+      "list_changed": false,
+      "count": 0
+    },
+    "resources": {
+      "supported": false,
+      "list_changed": false,
+      "subscribe": false,
+      "count": 0
+    }
+  },
+  "tools": [
+    {
+      "name": "list_schemas",
+      "description": "List all schemas in the database",
+      "input_schema": {
+        "properties": {
+          "noop": {
+            "description": "Workaround parameter, always use 'doit'",
+            "title": "Noop",
+            "type": "string"
+          }
+        },
+        "required": [
+          "noop"
+        ],
+        "title": "list_schemasArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_objects",
+      "description": "List objects in a schema with comments",
+      "input_schema": {
+        "properties": {
+          "schema_name": {
+            "description": "Schema name",
+            "title": "Schema Name",
+            "type": "string"
+          },
+          "object_type": {
+            "default": "table",
+            "description": "Object type: 'table', 'view', 'sequence','function', 'stored procedure', or 'extension'",
+            "title": "Object Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_name"
+        ],
+        "title": "list_objectsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_object_details",
+      "description": "Show detailed information about a database object with comments",
+      "input_schema": {
+        "properties": {
+          "schema_name": {
+            "description": "Schema name",
+            "title": "Schema Name",
+            "type": "string"
+          },
+          "object_name": {
+            "description": "Object name",
+            "title": "Object Name",
+            "type": "string"
+          },
+          "object_type": {
+            "default": "table",
+            "description": "Object type: 'table', 'view', 'sequence', or 'extension'",
+            "title": "Object Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_name",
+          "object_name"
+        ],
+        "title": "get_object_detailsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "explain_query",
+      "description": "Explains the execution plan for a SQL query, showing how the database will execute it and provides detailed cost estimates.",
+      "input_schema": {
+        "properties": {
+          "sql": {
+            "description": "SQL query to explain",
+            "title": "Sql",
+            "type": "string"
+          },
+          "analyze": {
+            "default": false,
+            "description": "When True, actually runs the query to show real execution statistics instead of estimates. Takes longer but provides more accurate information.",
+            "title": "Analyze",
+            "type": "boolean"
+          },
+          "hypothetical_indexes": {
+            "default": [],
+            "description": "A list of hypothetical indexes to simulate. Each index must be a\"\n        \" dictionary with these keys:\n    - 'table': The table name to add the index to (e.g., 'users')\n    - 'columns': List of column names to include in the index (e.g., ['email'] or \"\n    \"['last_name', 'first_name'])\n    - 'using': Optional index method (default: 'btree', other options include 'hash', \"\n    \"'gist', etc.)\n\nExamples: [\n    {\"table\": \"users\", \"columns\": [\"email\"], \"using\": \"btree\"},\n    {\"table\": \"orders\", \"columns\": [\"user_id\", \"created_at\"]}\n]\nIf there is no hypothetical index, you can pass an empty list.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Hypothetical Indexes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sql"
+        ],
+        "title": "explain_queryArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "analyze_workload_indexes",
+      "description": "Analyze frequently executed queries in the database and recommend optimal indexes",
+      "input_schema": {
+        "properties": {
+          "max_index_size_mb": {
+            "default": 10000,
+            "description": "Max index size in MB",
+            "title": "Max Index Size Mb",
+            "type": "integer"
+          },
+          "method": {
+            "default": "dta",
+            "description": "Method to use for analysis",
+            "enum": [
+              "dta",
+              "llm"
+            ],
+            "title": "Method",
+            "type": "string"
+          }
+        },
+        "title": "analyze_workload_indexesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "analyze_query_indexes",
+      "description": "Analyze a list of (up to 10) SQL queries and recommend optimal indexes",
+      "input_schema": {
+        "properties": {
+          "queries": {
+            "description": "List of Query strings to analyze",
+            "items": {
+              "type": "string"
+            },
+            "title": "Queries",
+            "type": "array"
+          },
+          "max_index_size_mb": {
+            "default": 10000,
+            "description": "Max index size in MB",
+            "title": "Max Index Size Mb",
+            "type": "integer"
+          },
+          "method": {
+            "default": "dta",
+            "description": "Method to use for analysis",
+            "enum": [
+              "dta",
+              "llm"
+            ],
+            "title": "Method",
+            "type": "string"
+          }
+        },
+        "required": [
+          "queries"
+        ],
+        "title": "analyze_query_indexesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "analyze_db_health",
+      "description": "Analyzes database health. Here are the available health checks:\n- index - checks for invalid, duplicate, and bloated indexes\n- connection - checks the number of connection and their utilization\n- vacuum - checks vacuum health for transaction id wraparound\n- sequence - checks sequences at risk of exceeding their maximum value\n- replication - checks replication health including lag and slots\n- buffer - checks for buffer cache hit rates for indexes and tables\n- constraint - checks for invalid constraints\n- all - runs all checks\nYou can optionally specify a single health check or a comma-separated list of health checks. The default is 'all' checks.",
+      "input_schema": {
+        "properties": {
+          "health_type": {
+            "default": "all",
+            "description": "Optional. Valid values are: all, buffer, connection, constraint, index, replication, sequence, vacuum.",
+            "title": "Health Type",
+            "type": "string"
+          }
+        },
+        "title": "analyze_db_healthArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_top_queries",
+      "description": "Reports the slowest or most resource-intensive queries using data from the 'pg_stat_statements' extension.",
+      "input_schema": {
+        "properties": {
+          "sort_by": {
+            "default": "resources",
+            "description": "Ranking criteria: 'total_time' for total execution time or 'mean_time' for mean execution time per call, or 'resources' for resource-intensive queries",
+            "title": "Sort By",
+            "type": "string"
+          },
+          "limit": {
+            "default": 10,
+            "description": "Number of queries to return when ranking based on mean_time or total_time",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "get_top_queriesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "add_comment_to_object",
+      "description": "Adds a comment to a database object.",
+      "input_schema": {
+        "properties": {
+          "schema_name": {
+            "description": "Schema name",
+            "title": "Schema Name",
+            "type": "string"
+          },
+          "object_type": {
+            "default": "table",
+            "description": "Object type: 'table', 'view', or 'column'",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "object_name": {
+            "description": "Object name",
+            "title": "Object Name",
+            "type": "string"
+          },
+          "comment": {
+            "description": "Comment text",
+            "title": "Comment",
+            "type": "string"
+          },
+          "column_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Column name (if object_type is 'column')",
+            "title": "Column Name"
+          }
+        },
+        "required": [
+          "schema_name",
+          "object_name",
+          "comment"
+        ],
+        "title": "add_comment_to_objectArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "execute_sql",
+      "description": "Execute a read-only SQL query",
+      "input_schema": {
+        "properties": {
+          "sql": {
+            "default": "all",
+            "description": "SQL to run",
+            "title": "Sql",
+            "type": "string"
+          }
+        },
+        "title": "execute_sqlArguments",
+        "type": "object"
+      }
+    }
+  ],
+  "prompts": [],
+  "resources": []
+}

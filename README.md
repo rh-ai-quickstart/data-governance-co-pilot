@@ -106,6 +106,7 @@ _(Videos and demonstrations to be added)_
      PROVIDER_MODE=mcp_direct \
      postgres.userId=postgres \
      postgres.password=postgres \
+     postgres.readonlyPassword=ReadOnly1! \
      postgres.databaseName=postgres \
      llm.apiKey=<your-api-key> \
      llm.baseUrl=https://<model-endpoint>/v1 \
@@ -271,6 +272,7 @@ make install NAMESPACE=your-namespace \
   PROVIDER_MODE=llama_stack \
   postgres.userId=postgres \
   postgres.password=postgres \
+  postgres.readonlyPassword=ReadOnly1! \
   postgres.databaseName=postgres
 ```
 
@@ -292,6 +294,7 @@ make install NAMESPACE=your-namespace \
   PROVIDER_MODE=llama_stack \
   postgres.userId=postgres \
   postgres.password=postgres \
+  postgres.readonlyPassword=ReadOnly1! \
   postgres.databaseName=postgres \
   llm.apiKey=<your-api-key> \
   llm.baseUrl=https://<model-endpoint>/v1 \
@@ -312,6 +315,7 @@ make install NAMESPACE=your-namespace \
   MODEL=nemotron \
   postgres.userId=postgres \
   postgres.password=postgres \
+  postgres.readonlyPassword=ReadOnly1! \
   postgres.databaseName=postgres
 ```
 
@@ -344,6 +348,7 @@ make install NAMESPACE=your-namespace \
   postgres.userId=postgres \
   postgres.password=postgres \
   postgres.databaseName=postgres \
+  postgres.readonlyPassword=ReadOnly1! \
   llm.apiKey=<your-api-key> \
   llm.baseUrl=https://<model-endpoint>/v1 \
   llm.model=<model-resource-name>
@@ -358,6 +363,7 @@ make install NAMESPACE=your-namespace \
   postgres.userId=postgres \
   postgres.password=postgres \
   postgres.databaseName=postgres \
+  postgres.readonlyPassword=ReadOnly1! \
   llm.apiKey=<your-api-key> \
   llm.baseUrl=https://<model-endpoint>/v1 \
   llm.model=<model-resource-name>
@@ -410,8 +416,9 @@ llm.apiKey=<api-key>            # API key for authentication
 postgres.userId=<username>
 postgres.password=<password>
 postgres.databaseName=<database>
-postgres.host=<hostname>        # Optional, defaults to deployed PostgreSQL
-postgres.port=5432              # Optional
+postgres.readonlyPassword=<password> # For readonly account to db MCP uses
+postgres.host=<hostname>             # Optional, defaults to deployed PostgreSQL
+postgres.port=5432                   # Optional
 
 # Tool call format (mcp_direct mode only, optional)
 llm.toolCallFormat=auto         # Options: auto (default), nemotron, openai
