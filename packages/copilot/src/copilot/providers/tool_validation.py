@@ -30,8 +30,8 @@ class ExecuteSqlArgs(BaseModel):
 
 
 class ListSchemasArgs(BaseModel):
-    """Arguments for list_schemas tool (no arguments required)"""
-    pass
+    """Arguments for list_schemas tool"""
+    noop: Optional[str] = Field(None, description="No-op parameter (workaround for Llama Stack issue)")
 
 
 class ListObjectsArgs(BaseModel):
