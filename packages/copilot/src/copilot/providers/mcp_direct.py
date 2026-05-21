@@ -25,6 +25,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from openai import AsyncOpenAI
 
 from .base import LLMProvider
+from .tool_validation import validate_tool_call, check_mcp_server_tools, ToolValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,10 @@ class MCPDirectProvider(LLMProvider):
 
         # Convert MCP tools to OpenAI function calling format
         self.mcp_tools = self._convert_mcp_tools_to_openai(tools_response.tools)
+
+        # Security: Validate MCP server's advertised tools against our allowlist
+        advertised_tool_names = [tool["function"]["name"] for tool in self.mcp_tools]
+        check_mcp_server_tools(advertised_tool_names)
 
     def _convert_mcp_tools_to_openai(self, mcp_tools) -> list[dict[str, Any]]:
         """
@@ -868,6 +873,40 @@ class MCPDirectProvider(LLMProvider):
                         tool_name = tool_call.function.name
                         tool_args = json.loads(tool_call.function.arguments)
                         tool_call_id = tool_call.id
+
+                    # SECURITY: Validate tool call before execution
+                    # This prevents prompt injection attacks from calling unauthorized tools
+                    try:
+                        validated_args = validate_tool_call(tool_name, tool_args)
+                        logger.info(f"Tool validation passed: {tool_name}")
+                    except ToolValidationError as e:
+                        # Tool validation failed - reject the call
+                        logger.error(f"SECURITY: Tool validation failed for {tool_name}: {e}")
+                        tool_result = {
+                            "error": f"Tool validation failed: {str(e)}",
+                            "security_event": True
+                        }
+
+                        # Append error result to messages and continue to next tool
+                        messages.append({
+                            "role": "tool",
+                            "content": json.dumps(tool_result),
+                            "tool_call_id": tool_call_id
+                        })
+
+                        # Yield error event
+                        yield {
+                            "type": "tool_result",
+                            "tool_name": tool_name,
+                            "result": "VALIDATION_FAILED",
+                            "mcp_time": 0.0,
+                            "iteration": iteration
+                        }
+
+                        continue  # Skip to next tool call
+
+                    # Use validated arguments (coerced to correct types)
+                    tool_args = validated_args
 
                     yield {
                         "type": "tool_call",
