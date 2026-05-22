@@ -1,7 +1,7 @@
 {
   "server_info": {
     "name": "pg-airman-mcp",
-    "version": "1.26.0",
+    "version": "1.27.1",
     "protocol_version": "2025-11-25"
   },
   "capabilities": {

@@ -42,28 +42,25 @@ class TestArgumentValidation:
 
     def test_execute_sql_valid_args(self):
         """execute_sql with valid arguments should pass"""
-        args = {"query": "SELECT * FROM users", "restricted": True}
+        args = {"sql": "SELECT * FROM users"}
         result = validate_tool_arguments("execute_sql", args)
-        assert result["query"] == "SELECT * FROM users"
-        assert result["restricted"] is True
-
-    def test_execute_sql_missing_required_arg(self):
-        """execute_sql without required 'query' should fail"""
-        args = {"restricted": True}
-        with pytest.raises(ToolValidationError, match="Invalid arguments"):
-            validate_tool_arguments("execute_sql", args)
+        assert result["sql"] == "SELECT * FROM users"
 
     def test_execute_sql_default_values(self):
         """execute_sql should apply default values"""
-        args = {"query": "SELECT 1"}
+        args = {}
         result = validate_tool_arguments("execute_sql", args)
-        assert result["query"] == "SELECT 1"
-        assert result["restricted"] is True  # Default value
+        assert result["sql"] == "all"  # Default value
 
-    def test_list_schemas_no_args(self):
-        """list_schemas accepts no arguments"""
-        result = validate_tool_arguments("list_schemas", {})
-        assert result == {}
+    def test_list_schemas_with_required_noop(self):
+        """list_schemas requires noop argument"""
+        result = validate_tool_arguments("list_schemas", {"noop": "doit"})
+        assert result == {"noop": "doit"}
+
+    def test_list_schemas_missing_required_arg(self):
+        """list_schemas without required 'noop' should fail"""
+        with pytest.raises(ToolValidationError, match="Invalid arguments"):
+            validate_tool_arguments("list_schemas", {})
 
     def test_get_object_details_valid_args(self):
         """get_object_details with all required args should pass"""
@@ -75,11 +72,13 @@ class TestArgumentValidation:
         result = validate_tool_arguments("get_object_details", args)
         assert result == args
 
-    def test_get_object_details_missing_arg(self):
-        """get_object_details missing required arg should fail"""
+    def test_get_object_details_default_type(self):
+        """get_object_details should apply default object_type"""
         args = {"schema_name": "public", "object_name": "users"}
-        with pytest.raises(ToolValidationError, match="Invalid arguments"):
-            validate_tool_arguments("get_object_details", args)
+        result = validate_tool_arguments("get_object_details", args)
+        assert result["schema_name"] == "public"
+        assert result["object_name"] == "users"
+        assert result["object_type"] == "table"  # Default value
 
     def test_get_top_queries_type_coercion(self):
         """get_top_queries should coerce types"""
@@ -94,6 +93,13 @@ class TestArgumentValidation:
         with pytest.raises(ToolValidationError, match="Invalid arguments"):
             validate_tool_arguments("get_top_queries", args)
 
+    def test_get_top_queries_default_values(self):
+        """get_top_queries should apply default values"""
+        args = {}
+        result = validate_tool_arguments("get_top_queries", args)
+        assert result["sort_by"] == "resources"  # Default value
+        assert result["limit"] == 10  # Default value
+
 
 class TestCompleteValidation:
     """Tests for complete tool call validation (name + arguments)"""
@@ -101,9 +107,9 @@ class TestCompleteValidation:
     def test_valid_tool_call(self):
         """Complete valid tool call should pass"""
         tool_name = "execute_sql"
-        args = {"query": "SELECT * FROM users"}
+        args = {"sql": "SELECT * FROM users"}
         result = validate_tool_call(tool_name, args)
-        assert result["query"] == "SELECT * FROM users"
+        assert result["sql"] == "SELECT * FROM users"
 
     def test_invalid_tool_name_rejected(self):
         """Tool call with unknown tool should be rejected"""
@@ -113,7 +119,7 @@ class TestCompleteValidation:
     def test_invalid_arguments_rejected(self):
         """Tool call with invalid arguments should be rejected"""
         with pytest.raises(ToolValidationError, match="Invalid arguments"):
-            validate_tool_call("execute_sql", {"wrong_arg": "value"})
+            validate_tool_call("list_schemas", {"wrong_arg": "value"})
 
 
 class TestMCPServerToolCheck:
@@ -121,6 +127,8 @@ class TestMCPServerToolCheck:
 
     def test_matching_tools(self, caplog):
         """MCP server with matching tools should log success"""
+        import logging
+        caplog.set_level(logging.INFO)
         advertised = list(ALLOWED_TOOLS)
         check_mcp_server_tools(advertised)
         assert "matches allowlist" in caplog.text
@@ -141,19 +149,22 @@ class TestMCPServerToolCheck:
 
 # Example test data for integration testing
 VALID_TOOL_CALLS = [
-    ("execute_sql", {"query": "SELECT 1"}),
-    ("list_schemas", {}),
+    ("execute_sql", {"sql": "SELECT 1"}),
+    ("list_schemas", {"noop": "doit"}),
     ("list_objects", {"schema_name": "public"}),
-    ("get_object_details", {"schema_name": "public", "object_name": "users", "object_type": "table"}),
-    ("explain_query", {"query": "SELECT * FROM users", "analyze": False}),
+    ("get_object_details", {"schema_name": "public", "object_name": "users"}),
+    ("explain_query", {"sql": "SELECT * FROM users", "analyze": False}),
     ("get_top_queries", {"limit": 10}),
+    ("analyze_workload_indexes", {"max_index_size_mb": 5000}),
+    ("analyze_query_indexes", {"queries": ["SELECT * FROM users"]}),
+    ("analyze_db_health", {"health_type": "all"}),
 ]
 
 INVALID_TOOL_CALLS = [
     ("_internal_function", {}),  # Unauthorized tool
     ("drop_database", {"name": "production"}),  # Unauthorized tool
-    ("execute_sql", {}),  # Missing required argument
-    ("get_object_details", {"schema_name": "public"}),  # Missing required arguments
+    ("list_schemas", {}),  # Missing required argument
+    ("get_object_details", {}),  # Missing required arguments
 ]
 
 

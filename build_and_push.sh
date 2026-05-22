@@ -7,7 +7,7 @@ podman build --platform linux/amd64 -t quay.io/rh-ai-quickstart/copilot-ui:lates
 podman push quay.io/rh-ai-quickstart/copilot-ui:latest
 
 cd ../../helm/pg-airman-mcp/
-podman build --platform linux/amd64 -t quay.io/rh-ai-quickstart/pg-airman-mcp:latest -f Containerfile .
+podman build --no-cache --platform linux/amd64 -t quay.io/rh-ai-quickstart/pg-airman-mcp:latest -f Containerfile .
 podman push quay.io/rh-ai-quickstart/pg-airman-mcp:latest
 
 cd ../../

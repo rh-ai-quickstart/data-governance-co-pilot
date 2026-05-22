@@ -25,13 +25,12 @@ logger = logging.getLogger(__name__)
 
 class ExecuteSqlArgs(BaseModel):
     """Arguments for execute_sql tool"""
-    query: str = Field(..., description="SQL query to execute")
-    restricted: bool = Field(default=True, description="Run in restricted mode (SELECT only)")
+    sql: str = Field(default="all", description="SQL to run")
 
 
 class ListSchemasArgs(BaseModel):
     """Arguments for list_schemas tool"""
-    noop: Optional[str] = Field(None, description="No-op parameter (workaround for Llama Stack issue)")
+    noop: str = Field(..., description="Workaround parameter, always use 'doit'")
 
 
 class ListObjectsArgs(BaseModel):
@@ -44,13 +43,14 @@ class GetObjectDetailsArgs(BaseModel):
     """Arguments for get_object_details tool"""
     schema_name: str = Field(..., description="Schema name")
     object_name: str = Field(..., description="Object name (table, view, etc.)")
-    object_type: str = Field(..., description="Object type: table, view, column, index, etc.")
+    object_type: str = Field(default="table", description="Object type: 'table', 'view', 'sequence', or 'extension'")
 
 
 class ExplainQueryArgs(BaseModel):
     """Arguments for explain_query tool"""
-    query: str = Field(..., description="SQL query to explain")
-    analyze: bool = Field(default=False, description="Run EXPLAIN ANALYZE (actually executes query)")
+    sql: str = Field(..., description="SQL query to explain")
+    analyze: bool = Field(default=False, description="When True, actually runs the query to show real execution statistics instead of estimates. Takes longer but provides more accurate information.")
+    hypothetical_indexes: list[dict[str, Any]] = Field(default=[], description="A list of hypothetical indexes to simulate")
 
 
 class AddCommentToObjectArgs(BaseModel):
@@ -64,14 +64,26 @@ class AddCommentToObjectArgs(BaseModel):
 
 class AnalyzeWorkloadIndexesArgs(BaseModel):
     """Arguments for analyze_workload_indexes tool"""
-    schema_name: Optional[str] = Field(None, description="Filter by schema name")
-    table_name: Optional[str] = Field(None, description="Filter by table name")
+    max_index_size_mb: int = Field(default=10000, description="Max index size in MB")
+    method: str = Field(default="dta", description="Method to use for analysis: 'dta' or 'llm'")
 
 
 class GetTopQueriesArgs(BaseModel):
     """Arguments for get_top_queries tool"""
-    limit: int = Field(default=10, ge=1, le=100, description="Number of queries to return")
-    order_by: str = Field(default="total_exec_time", description="Sort by: total_exec_time, calls, mean_exec_time")
+    sort_by: str = Field(default="resources", description="Ranking criteria: 'total_time' for total execution time or 'mean_time' for mean execution time per call, or 'resources' for resource-intensive queries")
+    limit: int = Field(default=10, ge=1, le=100, description="Number of queries to return when ranking based on mean_time or total_time")
+
+
+class AnalyzeQueryIndexesArgs(BaseModel):
+    """Arguments for analyze_query_indexes tool"""
+    queries: list[str] = Field(..., description="List of Query strings to analyze")
+    max_index_size_mb: int = Field(default=10000, description="Max index size in MB")
+    method: str = Field(default="dta", description="Method to use for analysis: 'dta' or 'llm'")
+
+
+class AnalyzeDbHealthArgs(BaseModel):
+    """Arguments for analyze_db_health tool"""
+    health_type: str = Field(default="all", description="Optional. Valid values are: all, buffer, connection, constraint, index, replication, sequence, vacuum.")
 
 
 # ============================================================================
@@ -86,6 +98,8 @@ TOOL_SCHEMAS: Dict[str, type[BaseModel]] = {
     "explain_query": ExplainQueryArgs,
     "add_comment_to_object": AddCommentToObjectArgs,
     "analyze_workload_indexes": AnalyzeWorkloadIndexesArgs,
+    "analyze_query_indexes": AnalyzeQueryIndexesArgs,
+    "analyze_db_health": AnalyzeDbHealthArgs,
     "get_top_queries": GetTopQueriesArgs,
 }
 
