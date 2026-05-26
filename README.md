@@ -483,4 +483,4 @@ oc logs -l serving.kserve.io/inferenceservice=<model-name> -n $NAMESPACE
 * **Industry:** Retail
 * **Product:** Red Hat OpenShift AI
 * **Use Case:** Data Governance and Compliance Automation, Policy enforcement 
-
+* **Partner**: EnterpriseDB
