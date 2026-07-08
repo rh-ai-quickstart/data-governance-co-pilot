@@ -470,6 +470,14 @@
 			<div class="title-section">
 				<h1>Data Governance Copilot</h1>
 				<p class="subtitle">Powered by EDB's PG Airman MCP server on Red Hat OpenShift AI</p>
+				<div class="ai-disclaimer">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="12" cy="12" r="10"></circle>
+						<line x1="12" y1="16" x2="12" y2="12"></line>
+						<line x1="12" y1="8" x2="12.01" y2="8"></line>
+					</svg>
+					<span>This assistant uses AI to generate code, analyze data, and provide insights.</span>
+				</div>
 			</div>
 			<div class="header-actions">
 				<PolicyUpload
@@ -596,6 +604,28 @@
 		margin: 0.25rem 0 0 0;
 		font-size: 0.875rem;
 		opacity: 0.9;
+	}
+
+	.ai-disclaimer {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.75rem;
+		padding: 0.5rem 0.75rem;
+		background: rgba(255, 255, 255, 0.15);
+		border-radius: 6px;
+		font-size: 0.8rem;
+		opacity: 0.95;
+		max-width: 600px;
+	}
+
+	.ai-disclaimer svg {
+		flex-shrink: 0;
+		opacity: 0.9;
+	}
+
+	.ai-disclaimer span {
+		line-height: 1.4;
 	}
 
 	.header-actions {
