@@ -51,8 +51,8 @@ make install NAMESPACE=myns \
   postgres.userId=postgres \
   postgres.password=yourpass \
   postgres.databaseName=yourdb \
-  minio.userId=minio \
-  minio.password=miniopass \
+  storage.accessKeyId=s4admin \
+  storage.secretAccessKey=s4secret \
   pgadmin.email=admin@example.com \
   pgadmin.password=adminpass
 ```

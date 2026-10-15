@@ -1,0 +1,93 @@
+{{/*
+The shared chart does not create application buckets. This regular Job waits
+for S4 and creates the buckets required by the Data Governance Copilot.
+*/}}
+{{- $storageName := include "aws-compatible-storage.fullname" . -}}
+{{- $credentialsSecret := include "aws-compatible-storage.secretName" . -}}
+{{- $existingJob := lookup "batch/v1" "Job" .Release.Namespace "aws-compatible-storage-buckets" -}}
+{{- if not $existingJob }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aws-compatible-storage-buckets
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/component: aws-compatible-storage-bucket-job
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: aws-compatible-storage-bucket-job
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-buckets
+          image: {{ .Values.jobImages.python }}
+          env:
+            - name: HOME
+              value: /tmp
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $credentialsSecret }}
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $credentialsSecret }}
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: S3_ENDPOINT_URL
+              value: {{ printf "http://%s:%s" $storageName (include "aws-compatible-storage.apiPort" .) | quote }}
+            - name: S3_UI_HEALTH_URL
+              value: {{ printf "http://%s:%s/api" $storageName (include "aws-compatible-storage.uiPort" .) | quote }}
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+            - name: S3_BUCKETS
+              value: {{ join "," .Values.awsCompatibleStorageBuckets | quote }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              pip install --no-cache-dir -q boto3
+              python - <<'PY'
+              import os
+              import time
+              import urllib.request
+
+              import boto3
+              from botocore.config import Config
+              from botocore.exceptions import ClientError
+
+              endpoint = os.environ["S3_ENDPOINT_URL"]
+              health_url = os.environ["S3_UI_HEALTH_URL"]
+              client = boto3.client(
+                  "s3",
+                  endpoint_url=endpoint,
+                  region_name=os.environ["AWS_DEFAULT_REGION"],
+                  config=Config(s3={"addressing_style": "path"}),
+              )
+
+              for attempt in range(60):
+                  try:
+                      urllib.request.urlopen(health_url, timeout=5).close()
+                      client.list_buckets()
+                      break
+                  except Exception as exc:
+                      if attempt == 59:
+                          raise
+                      print(f"Waiting for storage ({attempt + 1}/60): {exc}")
+                      time.sleep(5)
+
+              for bucket in filter(None, os.environ["S3_BUCKETS"].split(",")):
+                  try:
+                      client.head_bucket(Bucket=bucket)
+                      print(f"Bucket already exists: {bucket}")
+                  except ClientError as exc:
+                      error_code = exc.response.get("Error", {}).get("Code")
+                      if error_code not in {"404", "NoSuchBucket", "NotFound"}:
+                          raise
+                      client.create_bucket(Bucket=bucket)
+                      print(f"Created bucket: {bucket}")
+              PY
+{{- end }}

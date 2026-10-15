@@ -211,11 +211,11 @@ Both charts configure KServe InferenceServices on OpenShift AI.
 
 The quickstart includes two optional components for experimentation:
 
-**MinIO** (object storage):
+**S3-compatible storage (S4)**:
 ```bash
-DEPLOY_MINIO=true
-minio.userId=<username>
-minio.password=<password>
+DEPLOY_STORAGE=true
+storage.accessKeyId=<access-key>
+storage.secretAccessKey=<secret-key>
 ```
 
 **pgAdmin** (database administration):
@@ -425,9 +425,9 @@ llm.toolCallFormat=auto         # Options: auto (default), nemotron, openai
                                 # auto: detects from MODEL parameter
 
 # Optional components
-DEPLOY_MINIO=true              # Deploy MinIO for object storage
-minio.userId=<username>
-minio.password=<password>
+DEPLOY_STORAGE=true            # Deploy S3-compatible storage
+storage.accessKeyId=<access-key>
+storage.secretAccessKey=<secret-key>
 
 DEPLOY_PGADMIN=true            # Deploy pgAdmin for database management
 pgadmin.email=<email>

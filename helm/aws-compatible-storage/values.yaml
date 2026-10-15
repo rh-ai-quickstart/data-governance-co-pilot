@@ -1,0 +1,29 @@
+aws-compatible-storage:
+  enabled: true
+  fullnameOverride: aws-compatible-storage
+  image:
+    repository: quay.io/rh-aiservices-bu/s4
+    tag: "0.3.2"
+    pullPolicy: IfNotPresent
+  s3:
+    endpoint: http://aws-compatible-storage:7480
+    region: us-east-1
+    accessKeyId: ""
+    secretAccessKey: ""
+  auth:
+    enabled: true
+    username: ""
+    password: ""
+  route:
+    enabled: true
+    s3Api:
+      enabled: true
+  storage:
+    data:
+      size: 100Gi
+
+awsCompatibleStorageBuckets:
+  - copilot
+
+jobImages:
+  python: registry.redhat.io/ubi9/python-311:latest

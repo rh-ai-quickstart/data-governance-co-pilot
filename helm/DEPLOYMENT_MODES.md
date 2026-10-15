@@ -50,8 +50,9 @@ make install NAMESPACE=myns \
   postgres.userId=admin \
   postgres.password=<password> \
   postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
+  DEPLOY_STORAGE=true \
+  storage.accessKeyId=admin \
+  storage.secretAccessKey=<password> \
   pgadmin.email=admin@example.com \
   pgadmin.password=<password>
 ```
@@ -74,8 +75,9 @@ make install NAMESPACE=myns \
   postgres.userId=admin \
   postgres.password=<password> \
   postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
+  DEPLOY_STORAGE=true \
+  storage.accessKeyId=admin \
+  storage.secretAccessKey=<password> \
   pgadmin.email=admin@example.com \
   pgadmin.password=<password>
 ```
@@ -98,8 +100,9 @@ make install NAMESPACE=myns \
   postgres.userId=admin \
   postgres.password=<password> \
   postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
+  DEPLOY_STORAGE=true \
+  storage.accessKeyId=admin \
+  storage.secretAccessKey=<password> \
   pgadmin.email=admin@example.com \
   pgadmin.password=<password>
 ```
@@ -125,8 +128,9 @@ make install NAMESPACE=myns \
   postgres.userId=admin \
   postgres.password=<password> \
   postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
+  DEPLOY_STORAGE=true \
+  storage.accessKeyId=admin \
+  storage.secretAccessKey=<password> \
   pgadmin.email=admin@example.com \
   pgadmin.password=<password>
 ```
@@ -151,8 +155,9 @@ make install NAMESPACE=myns \
   postgres.userId=admin \
   postgres.password=<password> \
   postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
+  DEPLOY_STORAGE=true \
+  storage.accessKeyId=admin \
+  storage.secretAccessKey=<password> \
   pgadmin.email=admin@example.com \
   pgadmin.password=<password>
 ```
@@ -178,8 +183,9 @@ make install NAMESPACE=myns \
   postgres.userId=admin \
   postgres.password=<password> \
   postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
+  DEPLOY_STORAGE=true \
+  storage.accessKeyId=admin \
+  storage.secretAccessKey=<password> \
   pgadmin.email=admin@example.com \
   pgadmin.password=<password>
 ```
@@ -210,8 +216,9 @@ make qwen3-model-install NAMESPACE=myns
 - `postgres.userId` - PostgreSQL username
 - `postgres.password` - PostgreSQL password
 - `postgres.databaseName` - PostgreSQL database name
-- `minio.userId` - MinIO username (min 3 characters)
-- `minio.password` - MinIO password (min 8 characters)
+- `DEPLOY_STORAGE` - Deploy S3-compatible storage: `true` or `false` (default: `false`)
+- `storage.accessKeyId` - S4 access key (min 3 characters)
+- `storage.secretAccessKey` - S4 secret key (min 8 characters)
 - `pgadmin.email` - pgAdmin login email
 - `pgadmin.password` - pgAdmin password
 

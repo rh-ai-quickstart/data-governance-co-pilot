@@ -8,7 +8,8 @@ endif
 # Suppress directory change messages
 MAKEFLAGS += --no-print-directory
 
-MINIO_CHART := minio
+STORAGE_CHART := aws-compatible-storage
+STORAGE_SERVICE := aws-compatible-storage
 POSTGRES_CHART := pgvector
 # pgAdmin chart for database administration UI
 PGADMIN_CHART := pgadmin
@@ -29,8 +30,8 @@ COPILOT_LLAMA_STACK_CHART := copilot-llama-stack
 # Set to true to automatically deploy LLM model
 DEPLOY_MODEL ?= false
 
-# Flag to control whether to deploy MinIO (default: false)
-DEPLOY_MINIO ?= false
+# Flag to control whether to deploy S3-compatible storage (default: false)
+DEPLOY_STORAGE ?= false
 
 # Flag to control whether to deploy pgAdmin (default: false)
 DEPLOY_PGADMIN ?= false
@@ -72,8 +73,8 @@ MODEL ?= qwen3
 PROVIDER_MODE ?= mcp_direct
 
 MINIMUM_OC_VERSION = "4.17.0"
-MINIMUM_USERID_LENGTH = 3
-MINIMUM_PASSWORD_LENGTH = 8
+MINIMUM_ACCESS_KEY_LENGTH = 3
+MINIMUM_SECRET_KEY_LENGTH = 8
 
 # Default target
 .PHONY: help
@@ -81,8 +82,8 @@ help:
 	@echo "Available targets:"
 	@echo "  install       - Installs quickstart and supporting resources"
 	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, postgres.readonlyPassword"
-	@echo "                  Optional: DEPLOY_MODEL=true, DEPLOY_MINIO=true, DEPLOY_PGADMIN=true, MODEL=nemotron|qwen3, PROVIDER_MODE=mcp_direct|llama_stack"
-	@echo "                  If DEPLOY_MINIO=true: minio.userId, minio.password are required"
+	@echo "                  Optional: DEPLOY_MODEL=true, DEPLOY_STORAGE=true, DEPLOY_PGADMIN=true, MODEL=nemotron|qwen3, PROVIDER_MODE=mcp_direct|llama_stack"
+	@echo "                  If DEPLOY_STORAGE=true: storage.accessKeyId, storage.secretAccessKey are required"
 	@echo "                  If DEPLOY_PGADMIN=true: pgadmin.email, pgadmin.password are required"
 	@echo "                  Example (Nemotron): make install NAMESPACE=myns MODEL=nemotron DEPLOY_MODEL=true PROVIDER_MODE=mcp_direct ..."
 	@echo "                  Example (Qwen3): make install NAMESPACE=myns MODEL=qwen3 PROVIDER_MODE=llama_stack llm.apiKey=sk-xxx ..."
@@ -116,7 +117,7 @@ help:
 	@echo "Configuration options (set via environment variables or make arguments):"
 	@echo "  NAMESPACE                - Target namespace (required)"
 	@echo "  DEPLOY_MODEL             - Set to 'true' to auto-deploy and configure LLM model (default: false)"
-	@echo "  DEPLOY_MINIO             - Set to 'true' to deploy MinIO object storage (default: false)"
+	@echo "  DEPLOY_STORAGE           - Set to 'true' to deploy S3-compatible object storage (default: false)"
 	@echo "  DEPLOY_PGADMIN           - Set to 'true' to deploy pgAdmin web UI (default: false)"
 	@echo "  BUILD_COPILOT_UI         - Set to 'true' to build UI on cluster, false to pull from Quay (default: false)"
 	@echo "  BUILD_PG_AIRMAN_MCP      - Set to 'true' to build MCP server on cluster, false to pull from Quay (default: false)"
@@ -135,8 +136,8 @@ help:
 	@echo "  postgres.password        - PostgreSQL superuser password (required for database setup)"
 	@echo "  postgres.databaseName    - PostgreSQL database name (required)"
 	@echo "  postgres.readonlyPassword - Password for mcp_readonly user (required, used by MCP server)"
-	@echo "  minio.userId             - User ID to use for minio installation (required if DEPLOY_MINIO=true)"
-	@echo "  minio.password           - Password to use for minio installation (required if DEPLOY_MINIO=true)"
+	@echo "  storage.accessKeyId      - S3 access key (required if DEPLOY_STORAGE=true)"
+	@echo "  storage.secretAccessKey  - S3 secret key (required if DEPLOY_STORAGE=true)"
 	@echo "  pgadmin.email            - pgAdmin login email (required if DEPLOY_PGADMIN=true)"
 	@echo "  pgadmin.password         - pgAdmin login password (required if DEPLOY_PGADMIN=true)"
 	@echo "  pgairman.accessMode      - MCP access mode: restricted or unrestricted (default: restricted)"
@@ -152,24 +153,24 @@ check-oc-version:
 	@echo "Detected oc version on your machine: $(USER_OC_VERSION)"
 	@echo "NOTE: This install script has only been tested for oc version $(MINIMUM_OC_VERSION) and the bash and zsh shells."
 
-# Minio internally rejects user id and password values less than 3 and 8 characters, respectively
-# The install will fail if this occurs, so let's catch it early
-.PHONY: check-minio-credentials
-check-minio-credentials:
-	@if [ -z "$(minio.userId)" ]; then \
-		echo "Set minio.userId to a value that is at least $(MINIMUM_USERID_LENGTH) characters in length."; \
+# S4 rejects access keys and secret keys below the minimum lengths.
+# The install will fail if this occurs, so catch it early.
+.PHONY: check-storage-credentials
+check-storage-credentials:
+	@if [ -z "$(storage.accessKeyId)" ]; then \
+		echo "Set storage.accessKeyId to a value that is at least $(MINIMUM_ACCESS_KEY_LENGTH) characters in length."; \
 		exit 1; \
 	fi
-	@if [ $$(wc -m <<< $(minio.userId)) -lt $$(expr $(MINIMUM_USERID_LENGTH) + 1) ]; then \
-		echo "Set minio.userId to a value that is at least $(MINIMUM_USERID_LENGTH) characters in length."; \
+	@if [ $$(wc -m <<< $(storage.accessKeyId)) -lt $$(expr $(MINIMUM_ACCESS_KEY_LENGTH) + 1) ]; then \
+		echo "Set storage.accessKeyId to a value that is at least $(MINIMUM_ACCESS_KEY_LENGTH) characters in length."; \
 		exit 1; \
 	fi
-	@if [ -z "$(minio.password)" ]; then \
-		echo "Set minio.password to a value that is at least $(MINIMUM_PASSWORD_LENGTH) characters in length."; \
+	@if [ -z "$(storage.secretAccessKey)" ]; then \
+		echo "Set storage.secretAccessKey to a value that is at least $(MINIMUM_SECRET_KEY_LENGTH) characters in length."; \
 		exit 1; \
 	fi
-	@if [ $$(wc -m <<< $(minio.password)) -lt $$(expr $(MINIMUM_PASSWORD_LENGTH) + 1) ]; then \
-		echo "Set minio.password to a value that is at least $(MINIMUM_PASSWORD_LENGTH) characters in length."; \
+	@if [ $$(wc -m <<< $(storage.secretAccessKey)) -lt $$(expr $(MINIMUM_SECRET_KEY_LENGTH) + 1) ]; then \
+		echo "Set storage.secretAccessKey to a value that is at least $(MINIMUM_SECRET_KEY_LENGTH) characters in length."; \
 		exit 1; \
 	fi
 
@@ -250,8 +251,8 @@ namespace:
 
 .PHONY: install
 install: check-oc-version check-postgres-credentials check-model-provider-compatibility namespace
-ifeq ($(DEPLOY_MINIO),true)
-	@$(MAKE) check-minio-credentials
+ifeq ($(DEPLOY_STORAGE),true)
+	@$(MAKE) check-storage-credentials
 endif
 ifeq ($(DEPLOY_PGADMIN),true)
 	@$(MAKE) check-pgadmin-credentials
@@ -269,10 +270,12 @@ else ifeq ($(MODEL),qwen3)
 endif
 	@echo "Model is deploying in the background. Continuing with remaining deployments..."
 endif
-ifeq ($(DEPLOY_MINIO),true)
-	@$(MAKE) minio-install NAMESPACE=$(NAMESPACE)
+ifeq ($(DEPLOY_STORAGE),true)
+	@$(MAKE) storage-install NAMESPACE=$(NAMESPACE) \
+		storage.accessKeyId=$(storage.accessKeyId) \
+		storage.secretAccessKey=$(storage.secretAccessKey)
 else
-	@echo "Skipping MinIO installation (DEPLOY_MINIO=$(DEPLOY_MINIO))"
+	@echo "Skipping S3-compatible storage installation (DEPLOY_STORAGE=$(DEPLOY_STORAGE))"
 endif
 	@$(MAKE) database-install NAMESPACE=$(NAMESPACE)
 ifeq ($(DEPLOY_PGADMIN),true)
@@ -292,18 +295,21 @@ endif
 		$(if $(llm.apiKey),llm.apiKey=$(llm.apiKey),)
 	@$(MAKE) copilot-ui-install NAMESPACE=$(NAMESPACE)
 
-.PHONY: minio-install
-minio-install:
-	@echo "Installing Minio helm chart and default bucket ..."
-	@helm -n $(NAMESPACE) upgrade --install minio $(MINIO_CHART) \
-		--set minio.userId=$(minio.userId) \
-		--set minio.password=$(minio.password) \
+.PHONY: storage-install
+storage-install:
+	@echo "Installing S3-compatible storage and creating the copilot bucket ..."
+	@helm -n $(NAMESPACE) upgrade --install $(STORAGE_SERVICE) $(STORAGE_CHART) \
+		--set aws-compatible-storage.s3.accessKeyId=$(storage.accessKeyId) \
+		--set aws-compatible-storage.s3.secretAccessKey=$(storage.secretAccessKey) \
+		--set aws-compatible-storage.auth.username=$(storage.accessKeyId) \
+		--set aws-compatible-storage.auth.password=$(storage.secretAccessKey) \
 		--timeout 5m
-	@echo "Waiting for Minio route 'minio-api' to become ready in namespace $(NAMESPACE)..."
-	@oc wait pod -l app=minio -n $(NAMESPACE) --for=condition=Ready --timeout=60s
+	@echo "Waiting for S3-compatible storage to become ready in namespace $(NAMESPACE)..."
+	@oc wait deployment/$(STORAGE_SERVICE) -n $(NAMESPACE) --for=condition=Available --timeout=180s
+	@oc wait job/aws-compatible-storage-buckets -n $(NAMESPACE) --for=condition=complete --timeout=180s
 	@oc wait --for=jsonpath='{.status.ingress[0].conditions[?(@.type=="Admitted")].status}=True' \
-		route/minio-api -n $(NAMESPACE) --timeout=60s
-	@echo "Minio installation complete."
+		route/$(STORAGE_SERVICE)-api -n $(NAMESPACE) --timeout=60s
+	@echo "S3-compatible storage installation complete."
 
 .PHONY: build-data-loader-image
 build-data-loader-image:
@@ -452,14 +458,14 @@ else
 endif
 
 .PHONY: uninstall
-uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall nemotron-model-uninstall qwen3-model-uninstall copilot-llama-stack-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
+uninstall: check-oc-version storage-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall nemotron-model-uninstall qwen3-model-uninstall copilot-llama-stack-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
 
-.PHONY: minio-uninstall
-minio-uninstall:
-	@echo "Uninstalling Minio helm chart"
-	@helm -n $(NAMESPACE) uninstall minio || true
-	@echo "Removing minio PVCs from $(NAMESPACE)"
-	@oc get pvc -n $(NAMESPACE) -o custom-columns=NAME:.metadata.name | grep -E '^(minio)-data' | xargs -I {} oc delete pvc -n $(NAMESPACE) {} ||:
+.PHONY: storage-uninstall
+storage-uninstall:
+	@echo "Uninstalling S3-compatible storage helm chart"
+	@helm -n $(NAMESPACE) uninstall $(STORAGE_SERVICE) || true
+	@echo "Removing S3-compatible storage PVCs from $(NAMESPACE)"
+	@oc get pvc -n $(NAMESPACE) -o custom-columns=NAME:.metadata.name | grep -E '^(aws-compatible-storage)' | xargs -I {} oc delete pvc -n $(NAMESPACE) {} ||:
 
 .PHONY: database-uninstall
 database-uninstall:
@@ -827,4 +833,3 @@ copilot-ui-uninstall:
 delete-project:
 	@echo "Attempting to delete OpenShift project $(NAMESPACE)..."
 	@oc delete project $(NAMESPACE)
-

@@ -5,7 +5,7 @@ This directory contains Helm charts for deploying the data governance solution c
 ## Available Charts
 
 - **pgvector** - PostgreSQL database with pgvector extension
-- **minio** - Object storage for data assets
+- **aws-compatible-storage** - S3-compatible object storage for data assets
 - **pgadmin** - Database administration UI
 - **pg-airman-mcp** - EnterpriseDB's MCP server for enabling agentic applications that connect to PostgreSQL databases
 - **copilot-backend** - Microservice to support the user interface (contains MCP client)
@@ -16,7 +16,7 @@ This directory contains Helm charts for deploying the data governance solution c
 
 ### Full Installation
 
-Install all components (pgvector, minio, pgadmin, etc.). The namespace you provide below will be created automatically the installation. Do not install 
+Install all components (pgvector, S4 storage, pgadmin, etc.). The namespace you provide below will be created automatically the installation. Do not install
 into an existing namespace! Keep in mind that uninstallation (shown below) removes every object in the namespace and deletes the namespace.
 
 **Step 1:** Login to your OpenShift cluster
@@ -31,10 +31,14 @@ to this remote cluster.
 **Step 2:** Run the make build command in your local terminal
 
 ```bash
-make install NAMESPACE=your-namespace DEPLOY_MODEL=true postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres minio.userId=minio minio.password=minio1234! pgadmin.email=yourname@redhat.com pgadmin.password=postgres
+make install NAMESPACE=your-namespace DEPLOY_MODEL=true DEPLOY_STORAGE=true postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres storage.accessKeyId=s4admin storage.secretAccessKey=s4secret pgadmin.email=yourname@redhat.com pgadmin.password=postgres
 ```
 
 **Step 3:** Wait for installation to complete and login to the Copilot using your browser. The URL will be printed in your terminal when installation completes.
+
+### S3-Compatible Storage (S4)
+
+When `DEPLOY_STORAGE=true`, the shared `aws-compatible-storage` chart deploys S4 and creates the `copilot` bucket. Pods in the namespace use `http://aws-compatible-storage:7480` for the S3 API, while external S3 clients can use the `aws-compatible-storage-api` Route. Credentials are stored in the `aws-compatible-storage-credentials` Secret using the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` keys.
 
 ### Installation without Nemotron
 
@@ -51,7 +55,7 @@ llm.maxContextLength: an integer that specifies the effective model context leng
 **Step 2:** Run the make install command as above, except omit the DEPLOY_MODEL flag and provide a value for the copilot.llmApiKey (see example below)
 
 ```bash
-make install NAMESPACE=yournamespace postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres minio.userId=minio minio.password=minio1234! pgadmin.email=psamouel@redhat.com pgadmin.password=postgres copilot.llmApiKey=eyJhbGc...iOiJ
+make install NAMESPACE=yournamespace DEPLOY_STORAGE=true postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres storage.accessKeyId=s4admin storage.secretAccessKey=s4secret pgadmin.email=psamouel@redhat.com pgadmin.password=postgres copilot.llmApiKey=eyJhbGc...iOiJ
 ```
 
 ## Access Modes
@@ -111,7 +115,7 @@ make uninstall NAMESPACE=your-namespace
 
 ### Required Parameters
 
-The user IDs and passwords you provide below for the postgres database, pgadmin and minio are used to configure the installation with the passwords;
+When storage is enabled, the credentials you provide below for PostgreSQL, pgAdmin, and S4 storage are used to configure the installation;
 i.e., you are not providing credentials for an existing installation.
 
 | Parameter | Description | Example |
@@ -120,8 +124,8 @@ i.e., you are not providing credentials for an existing installation.
 | `postgres.userId` | PostgreSQL username | `postgres` |
 | `postgres.password` | PostgreSQL password | `securepass123` |
 | `postgres.databaseName` | Database name | `governance` |
-| `minio.userId` | MinIO username | - |
-| `minio.password` | MinIO password | - |
+| `storage.accessKeyId` | S4 access key | - |
+| `storage.secretAccessKey` | S4 secret key | - |
 | `pgadmin.email` | pgAdmin login email | - |
 | `pgadmin.password` | pgAdmin password | - |
 
@@ -170,7 +174,7 @@ You may also run the build selectively for one component. For example, you can b
 **Step 1:** Run make
 
 ```bash
-make copilot-ui-install NAMESPACE=samouelian-dev postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres minio.userId=minio minio.password=minio1234! pgadmin.email=psamouel@redhat.com pgadmin.password=postgres copilot.llmApiKey=eyJhbGciOiJS...XQqosOA
+make copilot-ui-install NAMESPACE=samouelian-dev postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres storage.accessKeyId=s4admin storage.secretAccessKey=s4secret pgadmin.email=psamouel@redhat.com pgadmin.password=postgres copilot.llmApiKey=eyJhbGciOiJS...XQqosOA
 ```
 Though all the above parameters are not used by the UI build target, it's best just to provide them to ensure your command passes the makefile's validation checks.
 
