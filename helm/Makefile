@@ -1,6 +1,6 @@
 # Namespace must be set unless the target is help
 ifeq ($(NAMESPACE),)
-ifeq (,$(filter help,$(MAKECMDGOALS)))
+ifeq (,$(filter depend help,$(MAKECMDGOALS)))
 $(error NAMESPACE is not set)
 endif
 endif
@@ -233,6 +233,11 @@ check-model-provider-compatibility:
 
 # Note: check-hf-token removed - no longer supporting local Llama model deployment
 
+.PHONY: depend
+depend:
+	@echo "Building Helm dependencies for $(STORAGE_CHART)..."
+	@helm dependency build $(STORAGE_CHART)
+
 .PHONY: namespace
 namespace:
 	@oc create namespace $(NAMESPACE) &> /dev/null && oc label namespace $(NAMESPACE) modelmesh-enabled=false ||:
@@ -250,7 +255,7 @@ namespace:
 	exit 1'
 
 .PHONY: install
-install: check-oc-version check-postgres-credentials check-model-provider-compatibility namespace
+install: check-oc-version check-postgres-credentials check-model-provider-compatibility namespace depend
 ifeq ($(DEPLOY_STORAGE),true)
 	@$(MAKE) check-storage-credentials
 endif
@@ -296,7 +301,7 @@ endif
 	@$(MAKE) copilot-ui-install NAMESPACE=$(NAMESPACE)
 
 .PHONY: storage-install
-storage-install:
+storage-install: depend
 	@echo "Installing S3-compatible storage and creating the copilot bucket ..."
 	@helm -n $(NAMESPACE) upgrade --install $(STORAGE_SERVICE) $(STORAGE_CHART) \
 		--set aws-compatible-storage.s3.accessKeyId=$(storage.accessKeyId) \
