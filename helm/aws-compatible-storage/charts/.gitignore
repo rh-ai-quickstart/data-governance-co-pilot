@@ -1,0 +1,4 @@
+# Helm fetches dependencies into this directory when you run `helm dependency build`.
+# The tgz files are not committed — run `make depend` (or `helm dependency build`)
+# before installing.
+*.tgz

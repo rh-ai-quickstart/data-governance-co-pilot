@@ -301,7 +301,7 @@ endif
 	@$(MAKE) copilot-ui-install NAMESPACE=$(NAMESPACE)
 
 .PHONY: storage-install
-storage-install: depend
+storage-install:
 	@echo "Installing S3-compatible storage and creating the copilot bucket ..."
 	@helm -n $(NAMESPACE) upgrade --install $(STORAGE_SERVICE) $(STORAGE_CHART) \
 		--set aws-compatible-storage.s3.accessKeyId=$(storage.accessKeyId) \
