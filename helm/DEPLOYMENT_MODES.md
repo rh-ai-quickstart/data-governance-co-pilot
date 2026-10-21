@@ -1,44 +1,37 @@
 # Data Governance Copilot - Deployment Modes
 
-This document describes the flexible deployment options for the Data Governance Copilot application.
+This document describes the deployment options for the Data Governance Copilot application.
+
+> **Note:** Llama Stack mode (`PROVIDER_MODE=llama_stack`) is no longer supported by this quickstart. If you previously deployed the quickstart in Llama Stack mode, do not continue using that deployment. Uninstall it with `make uninstall NAMESPACE=<namespace>` and redeploy using one of the scenarios below.
 
 ## Overview
 
-The application supports two LLM provider modes and two model options, with the flexibility to either deploy models to your cluster or use external model endpoints.
+The application uses the MCP-Direct provider mode with a choice of two models, and can either deploy the model to your cluster or use an external model endpoint.
 
-## Provider Modes
+## Provider Mode
 
-### 1. MCP-Direct Mode (`PROVIDER_MODE=mcp_direct`)
+### MCP-Direct Mode (`PROVIDER_MODE=mcp_direct`, default)
 - Backend connects directly to vLLM model via OpenAI-compatible API
 - Backend manages complete agentic loop (tool calling iterations)
 - Supports both Nemotron and Qwen3 models
-- Recommended for: Maximum control over tool calling behavior
-
-### 2. Llama Stack Mode (`PROVIDER_MODE=llama_stack`)
-- Backend uses Llama Stack Agents API
-- Llama Stack manages agentic loop internally
-- **Only compatible with Qwen3** (OpenAI function calling format)
-- Recommended for: Simplified deployment, Llama Stack ecosystem integration
 
 ## Model Options
 
 ### NVIDIA Nemotron Nano 9B v2
 - **Size**: 9 billion parameters
 - **Tool Calling**: Custom `<TOOLCALL>` tag format (Mistral parser)
-- **Compatible Modes**: MCP-Direct only
 - **Resource Requirements**: 1 GPU, 10Gi RAM
 - **Source**: quay.io/eformat/nvidia-nemotron-nano-9b-v2 (OCI) or HuggingFace
 
 ### Qwen3-14B
 - **Size**: 14 billion parameters
 - **Tool Calling**: OpenAI function calling format (Hermes parser)
-- **Compatible Modes**: Both MCP-Direct and Llama Stack
 - **Resource Requirements**: 1 GPU, 24Gi RAM
 - **Source**: HuggingFace hf://Qwen/Qwen3-14B (public, no token needed)
 
 ## Deployment Scenarios
 
-### Scenario 1: Deploy Nemotron Model + MCP-Direct Mode
+### Scenario 1: Deploy Nemotron Model
 
 Deploy Nemotron to your cluster and configure the backend to use it.
 
@@ -49,11 +42,8 @@ make install NAMESPACE=myns \
   PROVIDER_MODE=mcp_direct \
   postgres.userId=admin \
   postgres.password=<password> \
-  postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
-  pgadmin.email=admin@example.com \
-  pgadmin.password=<password>
+  postgres.readonlyPassword=<readonly-password> \
+  postgres.databaseName=adventure_works
 ```
 
 **What happens:**
@@ -62,7 +52,7 @@ make install NAMESPACE=myns \
 3. Backend auto-configured with model endpoint and API key
 4. MCP tools available for database operations
 
-### Scenario 2: Deploy Qwen3 Model + MCP-Direct Mode
+### Scenario 2: Deploy Qwen3 Model
 
 Deploy Qwen3 to your cluster for local inference.
 
@@ -73,11 +63,8 @@ make install NAMESPACE=myns \
   PROVIDER_MODE=mcp_direct \
   postgres.userId=admin \
   postgres.password=<password> \
-  postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
-  pgadmin.email=admin@example.com \
-  pgadmin.password=<password>
+  postgres.readonlyPassword=<readonly-password> \
+  postgres.databaseName=adventure_works
 ```
 
 **What happens:**
@@ -86,31 +73,7 @@ make install NAMESPACE=myns \
 3. Backend auto-configured with model endpoint and API key
 4. MCP tools available for database operations
 
-### Scenario 3: Deploy Qwen3 Model + Llama Stack Mode
-
-Deploy Qwen3 and use Llama Stack for agentic orchestration.
-
-```bash
-make install NAMESPACE=myns \
-  MODEL=qwen3 \
-  DEPLOY_MODEL=true \
-  PROVIDER_MODE=llama_stack \
-  postgres.userId=admin \
-  postgres.password=<password> \
-  postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
-  pgadmin.email=admin@example.com \
-  pgadmin.password=<password>
-```
-
-**What happens:**
-1. Qwen3-14B model deployed via KServe InferenceService
-2. Llama Stack deployed and configured to use the Qwen3 model
-3. Backend auto-configured to use Llama Stack Agents API
-4. MCP tools registered as Llama Stack toolgroup
-
-### Scenario 4: Use External Nemotron + MCP-Direct Mode
+### Scenario 3: Use External Nemotron
 
 Use an existing Nemotron deployment (e.g., vLLM server on another cluster).
 
@@ -119,16 +82,13 @@ make install NAMESPACE=myns \
   MODEL=nemotron \
   DEPLOY_MODEL=false \
   PROVIDER_MODE=mcp_direct \
-  copilot.llmBaseUrl=https://your-nemotron-endpoint/v1 \
-  copilot.llmModel=nvidia-nemotron-nano-9b-v2 \
-  copilot.llmApiKey=your-api-key \
+  llm.baseUrl=https://your-nemotron-endpoint/v1 \
+  llm.model=nvidia-nemotron-nano-9b-v2 \
+  llm.apiKey=your-api-key \
   postgres.userId=admin \
   postgres.password=<password> \
-  postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
-  pgadmin.email=admin@example.com \
-  pgadmin.password=<password>
+  postgres.readonlyPassword=<readonly-password> \
+  postgres.databaseName=adventure_works
 ```
 
 **What happens:**
@@ -136,34 +96,7 @@ make install NAMESPACE=myns \
 2. Backend configured to use external Nemotron endpoint
 3. MCP tools available for database operations
 
-### Scenario 5: Use External Qwen3 (LiteLLM) + Llama Stack Mode
-
-Use an existing Qwen3 deployment via LiteLLM proxy.
-
-```bash
-make install NAMESPACE=myns \
-  MODEL=qwen3 \
-  DEPLOY_MODEL=false \
-  PROVIDER_MODE=llama_stack \
-  copilot.llmModel=qwen3-14b \
-  copilot.llmBaseUrl=https://litellm-prod.apps.maas.redhatworkshops.io/v1 \
-  copilot.llmApiKey=sk-your-api-key \
-  postgres.userId=admin \
-  postgres.password=<password> \
-  postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
-  pgadmin.email=admin@example.com \
-  pgadmin.password=<password>
-```
-
-**What happens:**
-1. No model deployed to cluster
-2. Llama Stack deployed and configured to use external LiteLLM endpoint
-3. Backend configured to use Llama Stack Agents API
-4. MCP tools registered as Llama Stack toolgroup
-
-### Scenario 6: Use External Qwen3 + MCP-Direct Mode
+### Scenario 4: Use External Qwen3
 
 Use an existing Qwen3 vLLM deployment with direct backend connection.
 
@@ -172,22 +105,21 @@ make install NAMESPACE=myns \
   MODEL=qwen3 \
   DEPLOY_MODEL=false \
   PROVIDER_MODE=mcp_direct \
-  copilot.llmBaseUrl=https://your-qwen3-endpoint/v1 \
-  copilot.llmModel=qwen3-14b \
-  copilot.llmApiKey=your-api-key \
+  llm.baseUrl=https://your-qwen3-endpoint/v1 \
+  llm.model=qwen3-14b \
+  llm.apiKey=your-api-key \
   postgres.userId=admin \
   postgres.password=<password> \
-  postgres.databaseName=adventure_works \
-  minio.userId=admin \
-  minio.password=<password> \
-  pgadmin.email=admin@example.com \
-  pgadmin.password=<password>
+  postgres.readonlyPassword=<readonly-password> \
+  postgres.databaseName=adventure_works
 ```
 
 **What happens:**
 1. No model deployed to cluster
 2. Backend configured to use external Qwen3 endpoint directly
 3. MCP tools available for database operations
+
+To also deploy the pgAdmin web UI in any scenario, add `DEPLOY_PGADMIN=true pgadmin.email=<email> pgadmin.password=<password>`.
 
 ## Model-Specific Deployment
 
@@ -210,28 +142,27 @@ make qwen3-model-install NAMESPACE=myns
 - `postgres.userId` - PostgreSQL username
 - `postgres.password` - PostgreSQL password
 - `postgres.databaseName` - PostgreSQL database name
-- `minio.userId` - MinIO username (min 3 characters)
-- `minio.password` - MinIO password (min 8 characters)
-- `pgadmin.email` - pgAdmin login email
-- `pgadmin.password` - pgAdmin password
+- `postgres.readonlyPassword` - Password for the `mcp_readonly` database user used by the MCP server
 
 ### Optional Parameters
 - `MODEL` - Model to use: `nemotron` or `qwen3` (default: `qwen3`)
 - `DEPLOY_MODEL` - Deploy model to cluster: `true` or `false` (default: `false`)
-- `PROVIDER_MODE` - Provider mode: `mcp_direct` or `llama_stack` (default: `mcp_direct`)
-- `copilot.llmBaseUrl` - External LLM endpoint URL (required if `DEPLOY_MODEL=false`)
-- `copilot.llmModel` - External LLM model name (required if `DEPLOY_MODEL=false`)
-- `copilot.llmApiKey` - LLM API key (use `not-needed` for unauthenticated vLLM)
-- `copilot.maxContextLength` - Max context length in tokens (default: 32768)
+- `PROVIDER_MODE` - Provider mode: `mcp_direct` is the only supported mode (default: `mcp_direct`)
+- `llm.baseUrl` - External LLM endpoint URL (required if `DEPLOY_MODEL=false`)
+- `llm.model` - External LLM model name (required if `DEPLOY_MODEL=false`)
+- `llm.apiKey` - LLM API key (use `not-needed` for unauthenticated vLLM)
+- `llm.maxContextLength` - Max context length in tokens (default: 32768)
+- `DEPLOY_PGADMIN` - Deploy the pgAdmin web UI: `true` or `false` (default: `false`)
+- `pgadmin.email`, `pgadmin.password` - pgAdmin login (required if `DEPLOY_PGADMIN=true`)
 - `model.storage.uri` - Custom model URI (overrides default)
 - `model.storage.s3Bucket` - S3 bucket path for model storage
 
 ## Compatibility Matrix
 
-| Model | MCP-Direct | Llama Stack | Tool Calling Format | Notes |
-|-------|-----------|-------------|-------------------|-------|
-| Nemotron 9B | ✅ Yes | ❌ No | Custom `<TOOLCALL>` tags | Incompatible with Llama Stack |
-| Qwen3-14B | ✅ Yes | ✅ Yes | OpenAI function calling | Recommended for Llama Stack |
+| Model | MCP-Direct | Tool Calling Format |
+|-------|-----------|-------------------|
+| Nemotron 9B | ✅ Yes | Custom `<TOOLCALL>` tags |
+| Qwen3-14B | ✅ Yes | OpenAI function calling |
 
 ## Resource Requirements
 
@@ -291,27 +222,17 @@ oc get route nvidia-nemotron-nano-9b-v2 -n <namespace>
 oc get route qwen3-14b -n <namespace>
 ```
 
-### Check Llama Stack Status
-```bash
-oc get llamastackdistribution copilot-llama-stack -n <namespace>
-```
-
 ## Troubleshooting
-
-### Nemotron Incompatible with Llama Stack
-
-**Error**: "Nemotron model is not compatible with Llama Stack mode."
-
-**Solution**: Use `PROVIDER_MODE=mcp_direct` with Nemotron, or switch to Qwen3 for Llama Stack mode.
 
 ### Model Not Scheduling
 
 **Error**: Pods stuck in Pending state
 
-**Cause**: No available GPU nodes or insufficient resources
+**Cause**: No available GPU nodes, insufficient resources, or GPU node taints that the model pod doesn't tolerate
 
 **Solution**:
 - Check GPU node availability: `oc get nodes -l nvidia.com/gpu=true`
+- Check GPU node taints and make sure the `tolerations` list in the model chart's values.yaml matches them
 - Review pod events: `oc describe pod <pod-name> -n <namespace>`
 - Adjust resource requests in model values.yaml
 
@@ -330,5 +251,4 @@ oc get llamastackdistribution copilot-llama-stack -n <namespace>
 
 - [vLLM Tool Calling Documentation](https://docs.vllm.ai/en/latest/features/tool_calling/)
 - [Qwen3 vLLM Guide](https://docs.vllm.ai/projects/recipes/en/latest/Qwen/Qwen3.5.html)
-- [Llama Stack Documentation](https://llama-stack.readthedocs.io/)
 - [KServe Documentation](https://kserve.github.io/website/)

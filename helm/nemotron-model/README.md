@@ -207,7 +207,7 @@ The Makefile will:
 Hence, any modifications to the endpoint URL, model name or api token for the model will require redeploying the application. See the readme file in the root helm directory.
 
 **Note**:
-- When `DEPLOY_MODEL=true`, you don't need to specify `copilot.llmBaseUrl`, `copilot.llmModel`, or `copilot.llmApiKey` - they are all automatically extracted
+- When `DEPLOY_MODEL=true`, you don't need to specify `llm.baseUrl`, `llm.model`, or `llm.apiKey` - they are all automatically extracted
 - No S3 configuration required - the deployment uses a pre-built OCI container image by default
 
 ## Architecture

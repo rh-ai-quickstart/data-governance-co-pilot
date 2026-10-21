@@ -3,11 +3,11 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* package-lock.json* ./
+# Copy package files (pnpm-workspace.yaml allows esbuild's install script to run)
+COPY package.json pnpm-lock.yaml* package-lock.json* pnpm-workspace.yaml .npmrc ./
 
-# Install pnpm
-RUN npm install -g pnpm
+# Install pnpm (pinned: newer major versions fail the install on ignored build scripts)
+RUN npm install -g pnpm@10.24.0
 
 # Install dependencies
 RUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; \

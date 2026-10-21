@@ -61,3 +61,16 @@ route:
 security:
   # Enable OAuth authentication via oauth-proxy
   enableAuth: true
+
+# Tolerations for the model predictor pod. GPU nodes are usually tainted so that only
+# GPU workloads schedule on them, and the taint key varies by cluster (e.g. g5-gpu,
+# g6e-gpu, nvidia.com/gpu). Check your GPU nodes' taints with:
+#   oc get nodes -o custom-columns='NAME:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu,TAINTS:.spec.taints[*].key'
+# and adjust this list to match.
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+  - key: g6e-gpu
+    operator: Exists
+    effect: NoSchedule

@@ -40,13 +40,10 @@ spec:
       {{- else if eq .Values.model.storage.type "uri" }}
       storageUri: {{ .Values.model.storage.uri | quote }}
       {{- end }}
+    {{- with .Values.tolerations }}
     tolerations:
-      - effect: NoSchedule
-        key: nvidia.com/gpu
-        operator: Exists
-      - effect: NoSchedule
-        key: g5-gpu
-        operator: Exists
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
     annotations:
       serving.knative.dev/progress-deadline: {{ .Values.route.oauthProxyUpstreamTimeout }}
       serving.kserve.io/oauth-proxy-upstream-timeout: {{ .Values.route.oauthProxyUpstreamTimeout }}

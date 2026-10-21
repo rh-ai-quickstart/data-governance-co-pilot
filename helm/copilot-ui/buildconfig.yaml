@@ -17,11 +17,11 @@ spec:
 
       WORKDIR /app
 
-      # Copy package files
-      COPY apps/ui/package.json apps/ui/pnpm-lock.yaml* apps/ui/package-lock.json* ./
+      # Copy package files (pnpm-workspace.yaml allows esbuild's install script to run)
+      COPY apps/ui/package.json apps/ui/pnpm-lock.yaml* apps/ui/package-lock.json* apps/ui/pnpm-workspace.yaml apps/ui/.npmrc ./
 
-      # Install pnpm
-      RUN npm install -g pnpm
+      # Install pnpm (pinned: newer major versions fail the install on ignored build scripts)
+      RUN npm install -g pnpm@10.24.0
 
       # Install dependencies
       RUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; \

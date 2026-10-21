@@ -1,5 +1,7 @@
 # Copilot Llama Stack Helm Chart
 
+> **Deprecated:** Llama Stack mode is no longer supported by the Data Governance Co-Pilot quickstart. This chart remains in the repository as unsupported legacy code and should not be used for new deployments. Deployments that used Llama Stack mode should not be used; uninstall them with `make uninstall NAMESPACE=<namespace>` and redeploy in MCP Direct mode (see the [main README](../../README.md)).
+
 This Helm chart deploys a LlamaStackDistribution instance for the Data Governance Copilot application, providing an alternative LLM inference backend powered by Llama Stack on OpenShift AI.
 
 ## Overview
@@ -51,8 +53,6 @@ make install NAMESPACE=myns \
   postgres.userId=postgres \
   postgres.password=yourpass \
   postgres.databaseName=yourdb \
-  minio.userId=minio \
-  minio.password=miniopass \
   pgadmin.email=admin@example.com \
   pgadmin.password=adminpass
 ```

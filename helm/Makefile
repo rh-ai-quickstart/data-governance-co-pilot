@@ -8,7 +8,6 @@ endif
 # Suppress directory change messages
 MAKEFLAGS += --no-print-directory
 
-MINIO_CHART := minio
 POSTGRES_CHART := pgvector
 # pgAdmin chart for database administration UI
 PGADMIN_CHART := pgadmin
@@ -28,9 +27,6 @@ COPILOT_LLAMA_STACK_CHART := copilot-llama-stack
 # Flag to control whether to deploy the LLM model (default: false)
 # Set to true to automatically deploy LLM model
 DEPLOY_MODEL ?= false
-
-# Flag to control whether to deploy MinIO (default: false)
-DEPLOY_MINIO ?= false
 
 # Flag to control whether to deploy pgAdmin (default: false)
 DEPLOY_PGADMIN ?= false
@@ -72,8 +68,6 @@ MODEL ?= qwen3
 PROVIDER_MODE ?= mcp_direct
 
 MINIMUM_OC_VERSION = "4.17.0"
-MINIMUM_USERID_LENGTH = 3
-MINIMUM_PASSWORD_LENGTH = 8
 
 # Default target
 .PHONY: help
@@ -81,8 +75,7 @@ help:
 	@echo "Available targets:"
 	@echo "  install       - Installs quickstart and supporting resources"
 	@echo "                  Required: NAMESPACE, postgres.userId, postgres.password, postgres.databaseName, postgres.readonlyPassword"
-	@echo "                  Optional: DEPLOY_MODEL=true, DEPLOY_MINIO=true, DEPLOY_PGADMIN=true, MODEL=nemotron|qwen3, PROVIDER_MODE=mcp_direct|llama_stack"
-	@echo "                  If DEPLOY_MINIO=true: minio.userId, minio.password are required"
+	@echo "                  Optional: DEPLOY_MODEL=true, DEPLOY_PGADMIN=true, MODEL=nemotron|qwen3, PROVIDER_MODE=mcp_direct|llama_stack"
 	@echo "                  If DEPLOY_PGADMIN=true: pgadmin.email, pgadmin.password are required"
 	@echo "                  Example (Nemotron): make install NAMESPACE=myns MODEL=nemotron DEPLOY_MODEL=true PROVIDER_MODE=mcp_direct ..."
 	@echo "                  Example (Qwen3): make install NAMESPACE=myns MODEL=qwen3 PROVIDER_MODE=llama_stack llm.apiKey=sk-xxx ..."
@@ -116,7 +109,6 @@ help:
 	@echo "Configuration options (set via environment variables or make arguments):"
 	@echo "  NAMESPACE                - Target namespace (required)"
 	@echo "  DEPLOY_MODEL             - Set to 'true' to auto-deploy and configure LLM model (default: false)"
-	@echo "  DEPLOY_MINIO             - Set to 'true' to deploy MinIO object storage (default: false)"
 	@echo "  DEPLOY_PGADMIN           - Set to 'true' to deploy pgAdmin web UI (default: false)"
 	@echo "  BUILD_COPILOT_UI         - Set to 'true' to build UI on cluster, false to pull from Quay (default: false)"
 	@echo "  BUILD_PG_AIRMAN_MCP      - Set to 'true' to build MCP server on cluster, false to pull from Quay (default: false)"
@@ -135,8 +127,6 @@ help:
 	@echo "  postgres.password        - PostgreSQL superuser password (required for database setup)"
 	@echo "  postgres.databaseName    - PostgreSQL database name (required)"
 	@echo "  postgres.readonlyPassword - Password for mcp_readonly user (required, used by MCP server)"
-	@echo "  minio.userId             - User ID to use for minio installation (required if DEPLOY_MINIO=true)"
-	@echo "  minio.password           - Password to use for minio installation (required if DEPLOY_MINIO=true)"
 	@echo "  pgadmin.email            - pgAdmin login email (required if DEPLOY_PGADMIN=true)"
 	@echo "  pgadmin.password         - pgAdmin login password (required if DEPLOY_PGADMIN=true)"
 	@echo "  pgairman.accessMode      - MCP access mode: restricted or unrestricted (default: restricted)"
@@ -151,27 +141,6 @@ check-oc-version:
 	$(eval USER_OC_VERSION = $(shell oc version --client=true -o json | jq -r .clientVersion.gitVersion))
 	@echo "Detected oc version on your machine: $(USER_OC_VERSION)"
 	@echo "NOTE: This install script has only been tested for oc version $(MINIMUM_OC_VERSION) and the bash and zsh shells."
-
-# Minio internally rejects user id and password values less than 3 and 8 characters, respectively
-# The install will fail if this occurs, so let's catch it early
-.PHONY: check-minio-credentials
-check-minio-credentials:
-	@if [ -z "$(minio.userId)" ]; then \
-		echo "Set minio.userId to a value that is at least $(MINIMUM_USERID_LENGTH) characters in length."; \
-		exit 1; \
-	fi
-	@if [ $$(wc -m <<< $(minio.userId)) -lt $$(expr $(MINIMUM_USERID_LENGTH) + 1) ]; then \
-		echo "Set minio.userId to a value that is at least $(MINIMUM_USERID_LENGTH) characters in length."; \
-		exit 1; \
-	fi
-	@if [ -z "$(minio.password)" ]; then \
-		echo "Set minio.password to a value that is at least $(MINIMUM_PASSWORD_LENGTH) characters in length."; \
-		exit 1; \
-	fi
-	@if [ $$(wc -m <<< $(minio.password)) -lt $$(expr $(MINIMUM_PASSWORD_LENGTH) + 1) ]; then \
-		echo "Set minio.password to a value that is at least $(MINIMUM_PASSWORD_LENGTH) characters in length."; \
-		exit 1; \
-	fi
 
 .PHONY: check-postgres-credentials
 check-postgres-credentials:
@@ -250,9 +219,6 @@ namespace:
 
 .PHONY: install
 install: check-oc-version check-postgres-credentials check-model-provider-compatibility namespace
-ifeq ($(DEPLOY_MINIO),true)
-	@$(MAKE) check-minio-credentials
-endif
 ifeq ($(DEPLOY_PGADMIN),true)
 	@$(MAKE) check-pgadmin-credentials
 endif
@@ -268,11 +234,6 @@ else ifeq ($(MODEL),qwen3)
 		$(if $(model.storage.uri),model.storage.uri=$(model.storage.uri),)
 endif
 	@echo "Model is deploying in the background. Continuing with remaining deployments..."
-endif
-ifeq ($(DEPLOY_MINIO),true)
-	@$(MAKE) minio-install NAMESPACE=$(NAMESPACE)
-else
-	@echo "Skipping MinIO installation (DEPLOY_MINIO=$(DEPLOY_MINIO))"
 endif
 	@$(MAKE) database-install NAMESPACE=$(NAMESPACE)
 ifeq ($(DEPLOY_PGADMIN),true)
@@ -291,19 +252,6 @@ endif
 		$(if $(llm.model),llm.model=$(llm.model),) \
 		$(if $(llm.apiKey),llm.apiKey=$(llm.apiKey),)
 	@$(MAKE) copilot-ui-install NAMESPACE=$(NAMESPACE)
-
-.PHONY: minio-install
-minio-install:
-	@echo "Installing Minio helm chart and default bucket ..."
-	@helm -n $(NAMESPACE) upgrade --install minio $(MINIO_CHART) \
-		--set minio.userId=$(minio.userId) \
-		--set minio.password=$(minio.password) \
-		--timeout 5m
-	@echo "Waiting for Minio route 'minio-api' to become ready in namespace $(NAMESPACE)..."
-	@oc wait pod -l app=minio -n $(NAMESPACE) --for=condition=Ready --timeout=60s
-	@oc wait --for=jsonpath='{.status.ingress[0].conditions[?(@.type=="Admitted")].status}=True' \
-		route/minio-api -n $(NAMESPACE) --timeout=60s
-	@echo "Minio installation complete."
 
 .PHONY: build-data-loader-image
 build-data-loader-image:
@@ -392,6 +340,7 @@ ifeq ($(PROVIDER_MODE),llama_stack)
 	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
 		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/pg-airman-mcp \
 		--set image.tag=latest \
+		--set image.digest= \
 		--set image.pullPolicy=Always \
 		--set postgres.host=pgvector-0.pgvector-postgres-service \
 		--set postgres.port=5432 \
@@ -406,6 +355,7 @@ else
 	@helm -n $(NAMESPACE) upgrade --install pg-airman-mcp $(PG_AIRMAN_MCP_CHART) \
 		--set image.repository=image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/pg-airman-mcp \
 		--set image.tag=latest \
+		--set image.digest= \
 		--set image.pullPolicy=Always \
 		--set postgres.host=pgvector-0.pgvector-postgres-service \
 		--set postgres.port=5432 \
@@ -452,14 +402,7 @@ else
 endif
 
 .PHONY: uninstall
-uninstall: check-oc-version minio-uninstall database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall nemotron-model-uninstall qwen3-model-uninstall copilot-llama-stack-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
-
-.PHONY: minio-uninstall
-minio-uninstall:
-	@echo "Uninstalling Minio helm chart"
-	@helm -n $(NAMESPACE) uninstall minio || true
-	@echo "Removing minio PVCs from $(NAMESPACE)"
-	@oc get pvc -n $(NAMESPACE) -o custom-columns=NAME:.metadata.name | grep -E '^(minio)-data' | xargs -I {} oc delete pvc -n $(NAMESPACE) {} ||:
+uninstall: check-oc-version database-uninstall pgadmin-uninstall pg-airman-mcp-uninstall nemotron-model-uninstall qwen3-model-uninstall copilot-llama-stack-uninstall copilot-backend-uninstall copilot-ui-uninstall delete-project
 
 .PHONY: database-uninstall
 database-uninstall:

@@ -27,7 +27,10 @@ mcp:
 # Container image configuration
 image:
   repository: quay.io/rh-ai-quickstart/pg-airman-mcp
-  tag: latest
+  tag: "1.0.0"
+  # Pinned to pg-airman-mcp v1.0.0. When set, the digest takes precedence over the tag.
+  # Newer pg-airman-mcp releases are not supported by this quickstart.
+  digest: sha256:846822a9e97c315d4f82d46d83937d3d1ee5aadf6f8a025a74948110b1053171
   pullPolicy: Always
 
 # Resource limits

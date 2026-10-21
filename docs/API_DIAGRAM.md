@@ -50,10 +50,10 @@ graph TB
     T1 -.-> TL[Tool List<br/>Returns: 10 MCP tools with schemas]
 
     C1 -.-> CL[Conversation List<br/>Returns: all active conversations]
-    C2 -.-> CD[Delete Conversation<br/>Also deletes Llama Stack session]
+    C2 -.-> CD[Delete Conversation<br/>Clears message history]
 
     P1 -.-> PS[Policy Status<br/>Returns: has_policy, policy_preview]
-    P2 -.-> PU[Upload Policy<br/>May require conversation restart]
+    P2 -.-> PU[Upload Policy<br/>Applies to new messages immediately]
     P3 -.-> PD[Delete Policy<br/>May require conversation restart]
 
     style API fill:#2196F3,stroke:#1976D2,color:#fff
@@ -110,26 +110,15 @@ sequenceDiagram
 sequenceDiagram
     participant UI as UI
     participant API as service.py
-    participant Provider as Provider (mcp_direct or llama_stack)
-    
-    Note over UI,Provider: Policy Upload - MCP Direct Mode
+    participant Provider as Provider (mcp_direct)
     
     UI->>API: POST /policy/upload<br/>{policy_text}
     API->>API: Store in governance_policy
     API->>Provider: update_governance_policy(policy)
-    
-    alt MCP Direct Mode
-        Provider->>Provider: Update self.governance_policy
-        Provider-->>API: Success (no restart needed)
-        API-->>UI: {requires_restart: false}
-        Note over UI: New queries use new policy<br/>immediately
-    else Llama Stack Mode
-        Provider->>Provider: Recreate agent with new instructions
-        Provider->>Provider: Clear session_store
-        Provider-->>API: Success (restart required)
-        API-->>UI: {requires_restart: true}
-        Note over UI: All conversations must restart
-    end
+    Provider->>Provider: Update self.governance_policy
+    Provider-->>API: Success (no restart needed)
+    API-->>UI: {requires_restart: false}
+    Note over UI: New queries use new policy<br/>immediately
 ```
 
 ---
@@ -149,20 +138,16 @@ graph LR
 
     subgraph "Provider State"
         S4A[MCP Direct<br/>Single MCP connection]
-        S4B[Llama Stack<br/>_session_store<br/>conversation_id → session_id]
     end
 
     S1 -->|conversation_id| S2
     S2 -->|messages| S4A
-    S2 -->|messages| S4B
     S3 -.->|Injected into system prompt| S4A
-    S3 -.->|Injected into agent instructions| S4B
 
     style S1 fill:#4CAF50,stroke:#388E3C,color:#fff
     style S2 fill:#2196F3,stroke:#1976D2,color:#fff
     style S3 fill:#E91E63,stroke:#C2185B,color:#fff
     style S4A fill:#FF9800,stroke:#F57C00,color:#fff
-    style S4B fill:#FF9800,stroke:#F57C00,color:#fff
 ```
 
 ---
@@ -261,23 +246,15 @@ graph TD
               ↓
 ┌─────────────────────────────────────┐
 │       Provider Layer                │
-│  mcp_direct | llama_stack           │
+│           mcp_direct                │
 └─────────────────────────────────────┘
-          │           │
-   JSON-RPC │         │ Llama Stack API
-          │           │
-    ┌─────▼───┐   ┌──▼──────┐
-    │   MCP   │   │  Llama  │
-    │ Server  │   │  Stack  │
-    └─────────┘   └─────────┘
-          │            │
-          └────────────┘
-                │
-                │ OpenAI API
-                ↓
-         ┌────────────┐
-         │    vLLM    │
-         └────────────┘
+          │                 │
+ JSON-RPC │                 │ OpenAI API
+          ↓                 ↓
+    ┌──────────┐      ┌──────────┐
+    │   MCP    │      │   vLLM   │
+    │  Server  │      │          │
+    └──────────┘      └──────────┘
 ```
 
 ---

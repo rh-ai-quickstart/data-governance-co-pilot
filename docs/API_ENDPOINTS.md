@@ -1,5 +1,7 @@
 # Data Governance Copilot API Endpoints
 
+> **Note:** Llama Stack mode is no longer supported by this quickstart. This document describes the API in MCP Direct mode, where `provider_mode` is always `"mcp_direct"`.
+
 Complete REST API documentation for the copilot backend service.
 
 ---
@@ -238,7 +240,6 @@ DELETE /policy
 
 **Side Effects**:
 - Deletes message history from conversation_store
-- Deletes Llama Stack session (if using llama_stack provider)
 
 **Use Case**:
 - User starts new conversation
@@ -292,7 +293,6 @@ DELETE /policy
 
 **Response** (`PolicyResponse`):
 
-**MCP Direct mode** (no restart needed):
 ```json
 {
   "status": "uploaded",
@@ -303,23 +303,10 @@ DELETE /policy
 }
 ```
 
-**Llama Stack mode** (restart required):
-```json
-{
-  "status": "uploaded",
-  "policy_length": 1234,
-  "message": "Policy updated successfully. Agent recreated - all conversations must be restarted.",
-  "provider_mode": "llama_stack",
-  "requires_restart": true
-}
-```
-
 **Side Effects**:
 - Updates global `governance_policy` variable
 - Calls `provider.update_governance_policy()`
-- If `requires_restart=true` and `conversation_id` provided:
-  - Deletes that conversation
-  - Deletes associated Llama Stack session
+- Policy applies to new messages immediately (`requires_restart` is always `false` in MCP Direct mode)
 
 **Use Case**:
 - User uploads governance policy via UI
@@ -333,7 +320,6 @@ DELETE /policy
 
 **Response** (`PolicyResponse`):
 
-**MCP Direct mode**:
 ```json
 {
   "status": "deleted",
@@ -344,21 +330,9 @@ DELETE /policy
 }
 ```
 
-**Llama Stack mode**:
-```json
-{
-  "status": "deleted",
-  "policy_length": null,
-  "message": "Policy deleted successfully. Agent recreated - all conversations must be restarted.",
-  "provider_mode": "llama_stack",
-  "requires_restart": true
-}
-```
-
 **Side Effects**:
 - Sets global `governance_policy = None`
 - Calls `provider.update_governance_policy(None)`
-- Llama Stack: recreates agent without policy, invalidates all sessions
 
 **Use Case**:
 - User removes governance policy
@@ -389,7 +363,7 @@ class PolicyResponse(BaseModel):
     status: str                       # "uploaded" or "deleted"
     policy_length: int | None         # Character count
     message: str | None               # Human-readable status
-    provider_mode: str | None         # "mcp_direct" or "llama_stack"
+    provider_mode: str | None         # "mcp_direct"
     requires_restart: bool | None     # Must conversations restart?
 ```
 
@@ -472,9 +446,8 @@ app.add_middleware(
    - Replaced (not versioned) on upload
    - Ephemeral (lost on pod restart)
 
-3. **Provider-specific state**
+3. **Provider state**
    - MCP Direct: Single persistent MCP connection
-   - Llama Stack: `_session_store` maps conversation_id → session_id
 
 **Production Recommendation**: Persist to Redis or PostgreSQL
 
@@ -514,7 +487,7 @@ All endpoints follow this pattern:
 | `/query/stream` | 1-30s | Depends on query complexity |
 | `/tools` | <50ms | Returns cached tool list |
 | `/conversations` | <10ms | In-memory lookup |
-| `/policy/upload` | 10-500ms | Llama Stack: recreates agent |
+| `/policy/upload` | <10ms | In-memory update |
 | `/policy/status` | <10ms | In-memory check |
 
 ---

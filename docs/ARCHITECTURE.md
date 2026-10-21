@@ -1,5 +1,7 @@
 # Data Governance Copilot - System Architecture
 
+> **Note:** Llama Stack mode (`PROVIDER_MODE=llama_stack`) is no longer supported by this quickstart, and deployments that used it should not be used. The backend source still contains a Llama Stack provider and the repository still contains a `copilot-llama-stack` Helm chart, but both are unsupported legacy code. This document describes the supported MCP Direct architecture only.
+
 ## High-Level Container Diagram
 
 ### Overview - Simplified View
@@ -19,18 +21,12 @@ graph TB
     
     LLM["🤖 vLLM<br/><br/>Inference Engine<br/>Nemotron/Qwen3<br/>Port 8000<br/>(Optional)"]
     
-    LS["🔮 Llama Stack<br/><br/>Agent Platform<br/>OpenShift AI CRD<br/>Port 8000<br/>(Optional)"]
-    
     USER ==>|"HTTPS"| UI
     
     UI ==>|"HTTP/SSE<br/>/query/stream"| BE
     
     BE ==>|"JSON-RPC"| MCP
     BE ==>|"OpenAI API"| LLM
-    BE -.->|"Agent API"| LS
-    
-    LS -.->|"JSON-RPC"| MCP
-    LS -.->|"OpenAI API"| LLM
     
     MCP ==>|"SQL"| DB
     
@@ -40,12 +36,9 @@ graph TB
     style MCP fill:#FCE4EC,stroke:#E91E63,stroke-width:4px
     style DB fill:#F3E5F5,stroke:#9C27B0,stroke-width:4px
     style LLM fill:#FFEBEE,stroke:#F44336,stroke-width:4px
-    style LS fill:#E0F7FA,stroke:#00BCD4,stroke-width:4px
 ```
 
-**Legend:**
-- Solid arrows (==>) = Required connection
-- Dashed arrows (-.->)  = Optional (Llama Stack mode only)
+vLLM is optional: the backend can use an external OpenAI-compatible model endpoint instead.
 
 ---
 
@@ -84,18 +77,15 @@ graph TB
     B["State Stores<br/>conversation_store<br/>governance_policy"]
     C["Provider Factory"]
     D1["MCP Direct<br/>Provider"]
-    D2["Llama Stack<br/>Provider"]
     
     A --> B
     A --> C
     C --> D1
-    C --> D2
     
     style A fill:#2196F3,stroke:#1976D2,stroke-width:3px,color:#fff
     style B fill:#42A5F5,stroke:#1976D2,stroke-width:3px,color:#fff
     style C fill:#64B5F6,stroke:#1976D2,stroke-width:3px,color:#fff
     style D1 fill:#90CAF9,stroke:#1976D2,stroke-width:3px,color:#000
-    style D2 fill:#BBDEFB,stroke:#1976D2,stroke-width:3px,color:#000
 ```
 
 **Image:** `quay.io/rh-ai-quickstart/copilot-backend:latest`
@@ -128,7 +118,7 @@ graph TB
     style D3 fill:#FFF3E0,stroke:#F57C00,stroke-width:3px,color:#000
 ```
 
-**Image:** `quay.io/rh-ai-quickstart/pg-airman-mcp:latest`
+**Image:** `quay.io/rh-ai-quickstart/pg-airman-mcp:1.0.0`
 
 ---
 
@@ -174,33 +164,7 @@ graph LR
 
 ---
 
-#### 6️⃣ Llama Stack Pod (Optional)
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '16px'}}}%%
-graph TB
-    A["LlamaStack<br/>Distribution CRD"]
-    B["Agent<br/>Orchestration"]
-    C["Toolgroup<br/>Registry"]
-    D["Session<br/>Management"]
-    
-    A --> B
-    A --> C
-    A --> D
-    
-    style A fill:#00BCD4,stroke:#0097A7,stroke-width:3px,color:#fff
-    style B fill:#26C6DA,stroke:#0097A7,stroke-width:3px,color:#fff
-    style C fill:#4DD0E1,stroke:#0097A7,stroke-width:3px,color:#000
-    style D fill:#80DEEA,stroke:#0097A7,stroke-width:3px,color:#000
-```
-
-**Deployment:** LlamaStackDistribution CRD (OpenShift AI 3.2+)
-
----
-
-## Deployment Modes
-
-### Mode 1: MCP Direct (Default)
+## Orchestration: MCP Direct
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '18px'}}}%%
@@ -215,8 +179,6 @@ graph TB
     
     DB[("💾 pgvector<br/><br/>PostgreSQL")]
     
-    INACTIVE["❌ Llama Stack<br/><br/>NOT USED"]
-    
     UI ==>|"1. Query"| BE
     BE ==>|"2. OpenAI API"| LLM
     BE ==>|"3. JSON-RPC"| MCP
@@ -227,7 +189,6 @@ graph TB
     style MCP fill:#FCE4EC,stroke:#E91E63,stroke-width:4px
     style LLM fill:#FFEBEE,stroke:#F44336,stroke-width:4px
     style DB fill:#F3E5F5,stroke:#9C27B0,stroke-width:4px
-    style INACTIVE fill:#F5F5F5,stroke:#9E9E9E,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 **Active Components:** 5
@@ -237,53 +198,7 @@ graph TB
 - ✅ pgvector
 - ✅ vLLM (optional)
 
-**Inactive:**
-- ❌ Llama Stack
-
 **Orchestration:** Backend manages complete agentic loop
-
----
-
-### Mode 2: Llama Stack
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '18px'}}}%%
-graph TB
-    UI["📱 copilot-ui<br/><br/>Svelte Frontend"]
-    
-    BE["⚙️ copilot-backend<br/><br/>Llama Stack Provider<br/>Delegates to Agent"]
-    
-    LS["🔮 Llama Stack<br/><br/>Agent Orchestration<br/>Manages Agentic Loop"]
-    
-    MCP["🔧 pg-airman-mcp<br/><br/>Database Tools"]
-    
-    LLM["🤖 vLLM<br/><br/>LLM Inference<br/>(Required)"]
-    
-    DB[("💾 pgvector<br/><br/>PostgreSQL")]
-    
-    UI ==>|"1. Query"| BE
-    BE ==>|"2. Agent API"| LS
-    LS ==>|"3. OpenAI API"| LLM
-    LS ==>|"4. JSON-RPC"| MCP
-    MCP ==>|"5. SQL"| DB
-    
-    style UI fill:#E3F2FD,stroke:#2196F3,stroke-width:4px
-    style BE fill:#FFF3E0,stroke:#FF9800,stroke-width:4px
-    style LS fill:#E0F7FA,stroke:#00BCD4,stroke-width:4px
-    style MCP fill:#FCE4EC,stroke:#E91E63,stroke-width:4px
-    style LLM fill:#FFEBEE,stroke:#F44336,stroke-width:4px
-    style DB fill:#F3E5F5,stroke:#9C27B0,stroke-width:4px
-```
-
-**Active Components:** 6 (all)
-- ✅ copilot-ui
-- ✅ copilot-backend (Llama Stack mode)
-- ✅ Llama Stack
-- ✅ pg-airman-mcp
-- ✅ pgvector
-- ✅ vLLM (required)
-
-**Orchestration:** Llama Stack manages agentic loop
 
 ---
 
@@ -342,38 +257,34 @@ copilot-backend/
 │   ├── factory.py                # Provider selection
 │   ├── base.py                   # LLMProvider interface
 │   ├── mcp_direct.py             # MCP Direct implementation
-│   └── llama_stack.py            # Llama Stack implementation
+│   └── llama_stack.py            # Legacy Llama Stack provider (unsupported)
 └── Dependencies
     ├── fastapi
     ├── mcp[cli]                  # MCP SDK
-    ├── llama-stack-client
+    ├── llama-stack-client        # Used only by the legacy Llama Stack provider
     └── openai                    # For vLLM API
 ```
 
 **State**:
 - `conversation_store: dict[str, list[dict]]` - Conversation history
 - `governance_policy: str | None` - Active policy
-- Provider-specific:
-  - MCP Direct: Single persistent MCP connection
-  - Llama Stack: `_session_store` (conversation_id → session_id)
+- MCP Direct provider: Single persistent MCP connection
 
 **Environment Variables**:
-- `COPILOT_PROVIDER_MODE` - "mcp_direct" or "llama_stack"
+- `COPILOT_PROVIDER_MODE` - "mcp_direct" (the only supported value)
 - `LLM_BASE_URL` - vLLM endpoint
 - `LLM_MODEL` - Model name
 - `MCP_SERVER_URL` - pg-airman-mcp endpoint
-- `LLAMA_STACK_BASE_URL` - Llama Stack endpoint (if applicable)
 
 **External Dependencies**:
 - pg-airman-mcp (JSON-RPC)
 - vLLM (OpenAI API)
-- Llama Stack (Llama Stack API) - optional
 
 ---
 
 ### 3. pg-airman-mcp (MCP Server Container)
 
-**Image**: `quay.io/rh-ai-quickstart/pg-airman-mcp:latest`  
+**Image**: `quay.io/rh-ai-quickstart/pg-airman-mcp:1.0.0`  
 **Base**: `python:3.12-slim-bookworm`  
 **Port**: 8000 (HTTP)
 
@@ -403,7 +314,7 @@ pg-airman-mcp/
     └── psycopg2 connection pool
 ```
 
-**Patches Applied** (for OpenShift/Llama Stack):
+**Patches Applied** (for OpenShift and MCP client compatibility):
 1. DNS rebinding protection disabled
 2. `list_schemas` noop parameter workaround
 
@@ -490,41 +401,6 @@ vLLM/
 
 ---
 
-### 6. Llama Stack (Agent Orchestration - Optional)
-
-**Deployment**: LlamaStackDistribution CRD (OpenShift AI)  
-**Version**: 0.3.5.1+rhai0  
-**API Version**: llamastack.io/v1alpha1
-
-**Components**:
-```
-Llama Stack/
-├── Distribution Controller
-│   └── Manages agent lifecycle
-├── Agent Runtime
-│   ├── Agent creation
-│   ├── Session management
-│   └── Turn execution
-├── Toolgroup Registry
-│   ├── MCP endpoint registration
-│   └── Tool discovery
-└── Provider APIs
-    ├── Inference API → vLLM
-    ├── Tool Runtime API → MCP
-    └── Memory API (sessions)
-```
-
-**Resources Managed**:
-- Agents (with instructions + toolgroups)
-- Sessions (conversation state)
-- Toolgroups (MCP tools)
-
-**External Dependencies**:
-- vLLM (required)
-- pg-airman-mcp (required)
-
----
-
 ## Network Communication
 
 ### Protocols Used
@@ -535,9 +411,6 @@ Llama Stack/
 | copilot-ui | copilot-backend | HTTP + SSE | 8080 | API calls |
 | copilot-backend | pg-airman-mcp | JSON-RPC (HTTP) | 8000 | Tool execution |
 | copilot-backend | vLLM | OpenAI API (HTTP) | 8000 | LLM inference |
-| copilot-backend | Llama Stack | Llama Stack API | 8000 | Agent delegation |
-| Llama Stack | pg-airman-mcp | JSON-RPC (SSE) | 8000 | Tool execution |
-| Llama Stack | vLLM | OpenAI API (HTTP) | 8000 | LLM inference |
 | pg-airman-mcp | pgvector | PostgreSQL | 5432 | SQL queries |
 
 ---
@@ -627,12 +500,9 @@ Namespace: <user-namespace>
 ├── Jobs
 │   └── pgvector-data-loader (runs once)
 │
-├── InferenceServices (if DEPLOY_MODEL=true)
-│   ├── nemotron-model OR
-│   └── qwen3-model
-│
-└── LlamaStackDistributions (if PROVIDER_MODE=llama_stack)
-    └── copilot-llama-stack
+└── InferenceServices (if DEPLOY_MODEL=true)
+    ├── nemotron-model OR
+    └── qwen3-model
 ```
 
 ---
@@ -646,7 +516,6 @@ Namespace: <user-namespace>
 | pg-airman-mcp | ✅ Horizontal | Database connections | Connection pooling |
 | pgvector | ❌ Single | PostgreSQL replication | Primary-replica setup needed |
 | vLLM | ✅ Vertical (GPU) | GPU memory | Tensor parallelism for large models |
-| Llama Stack | ⚠️ Unknown | Session storage | Managed by operator |
 
 ---
 
@@ -667,7 +536,6 @@ graph TB
         UI["copilot-ui<br/>Port 8080"]
         BE["copilot-backend<br/>Port 8080"]
         MCP["pg-airman-mcp<br/>Port 8000"]
-        LS["Llama Stack<br/>Port 8000"]
     end
 
     subgraph ZONE4["💾 DATA ZONE<br/><br/>ClusterIP Network"]
@@ -682,10 +550,7 @@ graph TB
     ROUTE ==>|"HTTP<br/>Port 8080"| UI
     UI ==>|"HTTP"| BE
     BE ==>|"HTTP"| MCP
-    BE -.->|"HTTP"| LS
     BE ==>|"HTTP"| LLM
-    LS -.->|"HTTP"| MCP
-    LS -.->|"HTTP"| LLM
     MCP ==>|"PostgreSQL<br/>Port 5432"| DB
 
     style ZONE1 fill:#FFEBEE,stroke:#F44336,stroke-width:4px
@@ -699,7 +564,6 @@ graph TB
     style UI fill:#42A5F5,stroke:#1976D2,stroke-width:3px,color:#fff
     style BE fill:#42A5F5,stroke:#1976D2,stroke-width:3px,color:#fff
     style MCP fill:#42A5F5,stroke:#1976D2,stroke-width:3px,color:#fff
-    style LS fill:#42A5F5,stroke:#1976D2,stroke-width:3px,color:#fff
     style DB fill:#AB47BC,stroke:#7B1FA2,stroke-width:3px,color:#fff
     style LLM fill:#EC407A,stroke:#C2185B,stroke-width:3px,color:#fff
 ```
@@ -710,7 +574,7 @@ graph TB
 |------|-------------|------------|----------|
 | 🌐 **Public** | Untrusted | Internet | External |
 | 🛡️ **Edge** | Border | OpenShift Route | TLS termination |
-| 🏢 **Application** | Trusted | UI, Backend, MCP, Llama Stack | Internal only |
+| 🏢 **Application** | Trusted | UI, Backend, MCP | Internal only |
 | 💾 **Data** | Highly Trusted | PostgreSQL | Internal only |
 | ⚡ **Compute** | Trusted | vLLM (GPU) | Internal only |
 
@@ -738,13 +602,12 @@ graph TB
 | pg-airman-mcp | Environment Variables | ✅ Yes (DB connection) |
 | pgvector | Environment Variables | ❌ No (requires restart) |
 | vLLM | InferenceService args | ❌ No (model load time) |
-| Llama Stack | LlamaStackDistribution spec | ⚠️ Partial (agent recreation) |
 
 ---
 
 ## Build vs. Pull Strategy
 
-All components support two deployment modes:
+Components can be pulled from Quay or built on the cluster (except pg-airman-mcp, which is always pulled):
 
 ### Pull from Quay (Default)
 ```yaml
@@ -763,9 +626,10 @@ BUILD_DATA_LOADER=false      # Default
 ```yaml
 BUILD_COPILOT_UI=true
 BUILD_COPILOT_BACKEND=true
-BUILD_PG_AIRMAN_MCP=true
 BUILD_DATA_LOADER=true
 ```
+
+pg-airman-mcp is always pulled from Quay (pinned to v1.0.0 by digest); building it on the cluster is currently unsupported.
 
 **Benefits**:
 - ✅ Custom modifications
@@ -797,9 +661,9 @@ BUILD_DATA_LOADER=true
 - **GPU Type**: NVIDIA A100 (40GB/80GB) or L40 (48GB)
 - **RAM per Worker**: 64GB
 - **OpenShift**: 4.20.14+
-- **OpenShift AI**: 3.2+ (for Llama Stack mode)
+- **OpenShift AI**: 3.2+
 
 ---
 
-**Last Updated**: 2026-04-16  
+**Last Updated**: 2026-10-21  
 **Architecture Version**: 0.1.0

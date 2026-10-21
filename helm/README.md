@@ -5,7 +5,6 @@ This directory contains Helm charts for deploying the data governance solution c
 ## Available Charts
 
 - **pgvector** - PostgreSQL database with pgvector extension
-- **minio** - Object storage for data assets
 - **pgadmin** - Database administration UI
 - **pg-airman-mcp** - EnterpriseDB's MCP server for enabling agentic applications that connect to PostgreSQL databases
 - **copilot-backend** - Microservice to support the user interface (contains MCP client)
@@ -16,7 +15,7 @@ This directory contains Helm charts for deploying the data governance solution c
 
 ### Full Installation
 
-Install all components (pgvector, minio, pgadmin, etc.). The namespace you provide below will be created automatically the installation. Do not install 
+Install all components (pgvector, pgadmin, etc.). The namespace you provide below will be created automatically the installation. Do not install 
 into an existing namespace! Keep in mind that uninstallation (shown below) removes every object in the namespace and deletes the namespace.
 
 **Step 1:** Login to your OpenShift cluster
@@ -31,7 +30,7 @@ to this remote cluster.
 **Step 2:** Run the make build command in your local terminal
 
 ```bash
-make install NAMESPACE=your-namespace DEPLOY_MODEL=true postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres minio.userId=minio minio.password=minio1234! pgadmin.email=yourname@redhat.com pgadmin.password=postgres
+make install NAMESPACE=your-namespace MODEL=nemotron DEPLOY_MODEL=true postgres.userId=postgres postgres.password=postgres postgres.readonlyPassword=ReadOnly123 postgres.databaseName=postgres DEPLOY_PGADMIN=true pgadmin.email=yourname@redhat.com pgadmin.password=postgres
 ```
 
 **Step 3:** Wait for installation to complete and login to the Copilot using your browser. The URL will be printed in your terminal when installation completes.
@@ -48,10 +47,10 @@ llm.maxContextLength: an integer that specifies the effective model context leng
 
 (#Note: When deploying your own model, you must configure your model with a max length as well. It may equal to or greater than this value.)
 
-**Step 2:** Run the make install command as above, except omit the DEPLOY_MODEL flag and provide a value for the copilot.llmApiKey (see example below)
+**Step 2:** Run the make install command as above, except omit the DEPLOY_MODEL flag and provide a value for llm.apiKey (see example below)
 
 ```bash
-make install NAMESPACE=yournamespace postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres minio.userId=minio minio.password=minio1234! pgadmin.email=psamouel@redhat.com pgadmin.password=postgres copilot.llmApiKey=eyJhbGc...iOiJ
+make install NAMESPACE=yournamespace MODEL=nemotron postgres.userId=postgres postgres.password=postgres postgres.readonlyPassword=ReadOnly123 postgres.databaseName=postgres llm.apiKey=eyJhbGc...iOiJ
 ```
 
 ## Access Modes
@@ -111,7 +110,7 @@ make uninstall NAMESPACE=your-namespace
 
 ### Required Parameters
 
-The user IDs and passwords you provide below for the postgres database, pgadmin and minio are used to configure the installation with the passwords;
+The user IDs and passwords you provide below for the postgres database (and pgadmin, if `DEPLOY_PGADMIN=true`) are used to configure the installation with the passwords;
 i.e., you are not providing credentials for an existing installation.
 
 | Parameter | Description | Example |
@@ -120,10 +119,9 @@ i.e., you are not providing credentials for an existing installation.
 | `postgres.userId` | PostgreSQL username | `postgres` |
 | `postgres.password` | PostgreSQL password | `securepass123` |
 | `postgres.databaseName` | Database name | `governance` |
-| `minio.userId` | MinIO username | - |
-| `minio.password` | MinIO password | - |
-| `pgadmin.email` | pgAdmin login email | - |
-| `pgadmin.password` | pgAdmin password | - |
+| `postgres.readonlyPassword` | Password for the `mcp_readonly` user used by the MCP server | - |
+| `pgadmin.email` | pgAdmin login email (required if `DEPLOY_PGADMIN=true`) | - |
+| `pgadmin.password` | pgAdmin password (required if `DEPLOY_PGADMIN=true`) | - |
 
 See the makefile for other optional parameters.
 
@@ -170,14 +168,13 @@ You may also run the build selectively for one component. For example, you can b
 **Step 1:** Run make
 
 ```bash
-make copilot-ui-install NAMESPACE=samouelian-dev postgres.userId=postgres postgres.password=postgres postgres.databaseName=postgres minio.userId=minio minio.password=minio1234! pgadmin.email=psamouel@redhat.com pgadmin.password=postgres copilot.llmApiKey=eyJhbGciOiJS...XQqosOA
+make copilot-ui-install NAMESPACE=your-namespace BUILD_COPILOT_UI=true
 ```
-Though all the above parameters are not used by the UI build target, it's best just to provide them to ensure your command passes the makefile's validation checks.
 
 **Step 2:** Update running UI container to pickup the new UI container image the above command builds
 
 ```bash
-oc rollout restart deployment/copilot-ui -n samouelian-dev
+oc rollout restart deployment/copilot-ui -n your-namespace
 ```
 
 Selective building and deployment is much faster than redeploying the entire application. See the. makefile for other targets you can choose. Remember that the makefile

@@ -104,4 +104,4 @@ The data loader image is built to run in OpenShift's restricted security context
 
 **Data doesn't load:**
 - Check job logs: `oc logs job/pgvector-data-loader -n <namespace>`
-- Verify CSV files exist in `../../notebooks/dataset/`
+- Verify CSV files exist in `helm/pgvector/data/`

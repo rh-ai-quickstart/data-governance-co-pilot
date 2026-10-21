@@ -30,9 +30,9 @@ Traditionally, this knowledge lives in static PDF documents, scattered wikis, or
 - **Manufacturing**: Source vetted supply chain telemetry with quality annotations
 - **Retail**: Access customer analytics while respecting privacy policies
 
-### See It In Action
+To learn more about how the Data Governance Co-Pilot works, read the four-part Red Hat Developer blog series, starting with [Integrate OpenShift AI and PG Airman MCP Server](https://developers.redhat.com/articles/2026/06/09/integrate-openshift-ai-and-pg-airman-mcp-server).
 
-_(Videos and demonstrations to be added)_
+### See It In Action
 
 ![Screnshot](docs/images/screenshot.png)
 
@@ -56,14 +56,14 @@ _(Videos and demonstrations to be added)_
 
 - **OpenShift Container Platform**: Version 4.20.14 or higher
 - **OpenShift AI**: Version 3.2 or higher
-  - For Llama Stack mode: Llama Stack operator version 0.3.5.1+rhai0 (included in OpenShift AI 3.2)
-  - CRD API version: llamastack.io/v1alpha1
 - **NVIDIA GPU Operator**: Required for GPU support on OpenShift
 - **Helm**: Version 3.8 or higher
 - **oc CLI**: OpenShift command-line tool (version matching cluster)
 - **make**: GNU Make utility for deployment automation
 
 ## Deploy
+
+> **Note:** Llama Stack mode (`PROVIDER_MODE=llama_stack`) is no longer supported by this quickstart. If you previously deployed the quickstart in Llama Stack mode, do not continue using that deployment. Uninstall it with `make uninstall NAMESPACE=<namespace>` and redeploy using the instructions below.
 
 1. **Access to OpenShift Cluster**:
    ```bash
@@ -76,26 +76,15 @@ _(Videos and demonstrations to be added)_
    cd data-governance-co-pilot/helm
    ```
 
-3. **Verify OpenShift AI and Llama Stack Versions** (if using llama_stack mode):
+3. **Check GPU Node Tolerations** (if deploying a model with `DEPLOY_MODEL=true`):
 
-   Check Llama Stack CRD API version:
+   GPU nodes are usually tainted so that only GPU workloads are scheduled on them, and the taint key varies by cluster. The model charts tolerate `nvidia.com/gpu` and `g6e-gpu` by default. List your GPU nodes and their taints:
    ```bash
-   oc get crd llamastackdistributions.llamastack.io -o jsonpath='{.spec.versions[0].name}'
-   # Expected output: v1alpha1
+   oc get nodes -o custom-columns='NAME:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu,TAINTS:.spec.taints[*].key'
    ```
+   If your GPU nodes carry a different taint, add it to the `tolerations` list in `helm/nemotron-model/values.yaml` or `helm/qwen3-model/values.yaml` before installing. Otherwise the model pod will stay `Pending`.
 
-   Check Llama Stack operator version:
-   ```bash
-   oc get datasciencecluster default-dsc -o json | \
-     jq -r '.status.components.llamastackoperator.releases[] | select(.name == "Llama Stack") | .version'
-   # Expected output: 0.3.5.1+rhai0
-   ```
-
-4. **Enable Llama Stack Support** (if using llama_stack mode):
-
-   Follow the activation instructions: [Activating the Llama Stack Operator](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_llama_stack/activating-the-llama-stack-operator_rag)
-
-5. **Deploy application**
+4. **Deploy application**
 
    IMPORTANT: The make command below will NOT deploy the Nemotron model to your target cluster. You must provide the key, endpoint URL and model-resource-name to an existing nemotron model. There are several other deployment options, however, including those which will automatically deploy a model to your cluster. Please see the 'Model Deployment Options' in [Optional technical section](#optional-technical-section) below for all deployment options.
 
@@ -106,7 +95,7 @@ _(Videos and demonstrations to be added)_
      PROVIDER_MODE=mcp_direct \
      postgres.userId=postgres \
      postgres.password=postgres \
-     postgres.readonlyPassword=ReadOnly1! \
+     postgres.readonlyPassword=ReadOnly123 \
      postgres.databaseName=postgres \
      llm.apiKey=<your-api-key> \
      llm.baseUrl=https://<model-endpoint>/v1 \
@@ -123,7 +112,6 @@ make uninstall NAMESPACE=$NAMESPACE
 
 **Warning**: This command performs a complete cleanup and will delete:
 - All application deployments (UI, backend, MCP server, database)
-- LlamaStackDistribution resources (if deployed in llama_stack mode)
 - Model deployments (if deployed with DEPLOY_MODEL=true)
 - All routes, services, secrets, and ConfigMaps
 - The namespace itself
@@ -141,11 +129,9 @@ This action is irreversible. Ensure you have backups of any important data befor
 
 - [OpenShift AI Documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed)
 - [OpenShift Container Platform Documentation](https://docs.redhat.com/en/documentation/openshift_container_platform)
-- [Llama Stack Operator Guide](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html/working_with_llama_stack)
 
 ### AI Frameworks and Tools
 
-- [Llama Stack Documentation](https://llama-stack.readthedocs.io)
 - [vLLM Documentation](https://docs.vllm.ai)
 - [KServe Documentation](https://kserve.github.io/website/)
 
@@ -161,7 +147,7 @@ This action is irreversible. Ensure you have backups of any important data befor
 **Qwen3-14B-AWQ**:
 - [Model Card on HuggingFace](https://huggingface.co/Qwen/Qwen3-14B-AWQ)
 - Tool Calling Format: Standard OpenAI function calling
-- Compatible Modes: Both Custom MCP Client and Llama Stack modes
+- Compatible Modes: Custom MCP Client mode only
 - vLLM Configuration: See `helm/qwen3-model/` chart
 
 ## Optional technical section
@@ -172,28 +158,23 @@ This action is irreversible. Ensure you have backups of any important data befor
 2. **Navigates Metadata**: The copilot uses MCP to inspect database metadata, including custom annotations that map high-level policies to specific tables and columns
 3. **Executes Safe Queries**: All database interactions are validated against governance rules and executed through the MCP server
 4. **Provides Transparency**: Users can observe the AI's reasoning process as it explores the database and formulates answers (reasoning token generation is only enabled when using the Nemotron model with MCP direct deployment)
-5. **Dual MCP Transport Support**: Streamable HTTP (mcp_direct mode) and SSE (llama_stack mode)
-6. **Multi-Model Support**: Works with Nemotron and Qwen3 models with automatic format detection
-7. **Provider-Based Architecture**: Clean abstraction layer supports both orchestration modes with minimal code duplication
+5. **Multi-Model Support**: Works with Nemotron and Qwen3 models with automatic format detection
 
 ### High-Level Components
 
-The Data Governance Co-Pilot consists of five runtime components:
+The Data Governance Co-Pilot consists of four runtime components:
 
 1. **Web UI (Svelte)**: Modern chat interface with streaming responses and reasoning visualization
-2. **Backend Orchestrator (FastAPI)**: Provider-based architecture supporting two orchestration modes
+2. **Backend Orchestrator (FastAPI)**: Manages the agentic loop between the LLM and the MCP server
 3. **MCP Server (pg-airman-mcp)**: PostgreSQL introspection and query tools exposed via Model Context Protocol
 4. **PostgreSQL Database**: PostgreSQL 15 preloaded with sample e-commerce schema and data
-5. **Copilot Llama Stack Distribution**: (Llama Stack mode only) Llama Stack CRD and resources managed by OpenShift AI operator
 
 ### Technology Stack
 
 - **Frontend**: Svelte 5, TypeScript, TailwindCSS, Server-Sent Events (SSE)
 - **Copilot Backend**: Python 3.12, FastAPI
 - **LLM Inference**: OpenShift AI inference server using vLLM (v0.11.0)
-- **Orchestration**:
-  - Custom MCP Client: Supports Nemotron and Qwen3 models
-  - Llama Stack: OpenShift AI Llama Stack Operator v0.3.5.1+rhai0 (Qwen3 model)
+- **Orchestration**: Custom MCP Client (supports Nemotron and Qwen3 models)
 - **Tools**: Model Context Protocol (MCP) server for PostgreSQL (pg-airman-mcp)
 - **Database**: PostgreSQL 15
 - **Platform**: OpenShift Container Platform 4.20.14, OpenShift AI 3.2+
@@ -209,14 +190,7 @@ Both charts configure KServe InferenceServices on OpenShift AI.
 
 ### Optional Components
 
-The quickstart includes two optional components for experimentation:
-
-**MinIO** (object storage):
-```bash
-DEPLOY_MINIO=true
-minio.userId=<username>
-minio.password=<password>
-```
+The quickstart includes an optional component for experimentation:
 
 **pgAdmin** (database administration):
 ```bash
@@ -229,31 +203,16 @@ Note: These optional components are not hardened for production use.
 
 ### Deployment Options
 
-The application supports two distinct deployment modes to suit different orchestration needs:
+The application uses the Custom MCP Client mode (`mcp_direct`):
 
-**Custom MCP Client Mode** (mcp_direct)
 - A "hands-on" approach where the copilot backend manages the complete agentic loop
 - Provides granular control over tool calling, response streaming, and model interaction
 - Supports both Nemotron (custom tool format) and Qwen3 (OpenAI function calling) models
 - Best for: Organizations wanting full control, custom orchestration logic, or specialized model formats
 
-**Llama Stack Mode** (llama_stack)
-- Leverages the OpenShift AI Llama Stack operator for standardized agent orchestration
-- Offloads agent management to the emerging Llama Stack framework
-- Supports Qwen3 model with standard OpenAI function calling
-- Best for: Organizations using OpenShift AI infrastructure and preferring managed orchestration
-- Note: Llama Stack in RHOAI is preview technology (version 0.3.5.1+rhai0) and not recommended for production
-
-Supporting both deployment modes provides:
-
-1. **Future-Proofing**: Maintains integration path with the emerging Llama Stack framework as it matures
-2. **Risk Mitigation**: Protects against API changes in preview technologies like Llama Stack
-3. **Custom Flexibility**: Enables custom orchestration logic for complex requirements that standardized frameworks don't support
-4. **Educational Value**: Demonstrates both approaches so teams can make informed architectural decisions
-
 #### Data Sovereignty & Security
 
-Both deployment modes ensure your organization maintains full control over its AI stack. By combining **Red Hat OpenShift** and **OpenShift AI**, you retain sovereignty over:
+The quickstart ensures your organization maintains full control over its AI stack. By combining **Red Hat OpenShift** and **OpenShift AI**, you retain sovereignty over:
 
 - **The LLM Model**: Run private models without external API calls or third-party data exposure
 - **Inference & Compute**: Keep sensitive data processing within your managed cluster
@@ -261,52 +220,7 @@ Both deployment modes ensure your organization maintains full control over its A
 
 The quickstart supports multiple deployment scenarios. Choose the option that matches your requirements:
 
-#### Option 1: Full Installation with Llama Stack Mode (installs Qwen3 Model in your cluster)
-
-**Note**: Llama Stack mode requires version 0.3.5.1+rhai0. Verify version before proceeding (see Prerequisites above).
-
-```bash
-make install NAMESPACE=your-namespace \
-  DEPLOY_MODEL=true \
-  MODEL=qwen3 \
-  PROVIDER_MODE=llama_stack \
-  postgres.userId=postgres \
-  postgres.password=postgres \
-  postgres.readonlyPassword=ReadOnly1! \
-  postgres.databaseName=postgres
-```
-
-This deployment:
-- Deploys Qwen3-14B model to OpenShift AI
-- Configures Llama Stack Distribution CRD
-- Uses Llama Stack for agent orchestration
-- Deploys PostgreSQL database with sample data
-- Configures all networking and routes
-
-#### Option 2: Llama Stack Mode with External Model; you must provide the details to an already installed qwen 3 model.
-
-Use this when connecting to an existing Qwen3-14B deployment:
-
-```bash
-make install NAMESPACE=your-namespace \
-  DEPLOY_MODEL=false \
-  MODEL=qwen3 \
-  PROVIDER_MODE=llama_stack \
-  postgres.userId=postgres \
-  postgres.password=postgres \
-  postgres.readonlyPassword=ReadOnly1! \
-  postgres.databaseName=postgres \
-  llm.apiKey=<your-api-key> \
-  llm.baseUrl=https://<model-endpoint>/v1 \
-  llm.model=qwen3-14b
-```
-
-**Requirements for external model**:
-- Must be Qwen3-14B or compatible model
-- Must support OpenAI function calling format
-- See `helm/qwen3-model/` for required vLLM configuration flags
-
-#### Option 3: Full Installation with MCP Direct Mode (installs Nemotron Model in your cluster)
+#### Option 1: Full Installation with MCP Direct Mode (installs Nemotron Model in your cluster)
 
 ```bash
 make install NAMESPACE=your-namespace \
@@ -315,7 +229,7 @@ make install NAMESPACE=your-namespace \
   MODEL=nemotron \
   postgres.userId=postgres \
   postgres.password=postgres \
-  postgres.readonlyPassword=ReadOnly1! \
+  postgres.readonlyPassword=ReadOnly123 \
   postgres.databaseName=postgres
 ```
 
@@ -325,7 +239,7 @@ This deployment:
 - Enables reasoning transparency features
 - Supports Nemotron's custom tool calling format
 
-#### Option 4: Full Installation with MCP Direct Mode (installs Qwen3 Model in your cluster)
+#### Option 2: Full Installation with MCP Direct Mode (installs Qwen3 Model in your cluster)
 
 ```bash
 make install NAMESPACE=your-namespace \
@@ -334,10 +248,11 @@ make install NAMESPACE=your-namespace \
   MODEL=qwen3 \
   postgres.userId=postgres \
   postgres.password=postgres \
+  postgres.readonlyPassword=ReadOnly123 \
   postgres.databaseName=postgres
 ```
 
-#### Option 5: MCP Direct Mode with External Model; you must provide the details to an already installed nemotron model.
+#### Option 3: MCP Direct Mode with External Model; you must provide the details to an already installed model.
 
 **Using Nemotron**:
 ```bash
@@ -348,7 +263,7 @@ make install NAMESPACE=your-namespace \
   postgres.userId=postgres \
   postgres.password=postgres \
   postgres.databaseName=postgres \
-  postgres.readonlyPassword=ReadOnly1! \
+  postgres.readonlyPassword=ReadOnly123 \
   llm.apiKey=<your-api-key> \
   llm.baseUrl=https://<model-endpoint>/v1 \
   llm.model=<model-resource-name>
@@ -363,7 +278,7 @@ make install NAMESPACE=your-namespace \
   postgres.userId=postgres \
   postgres.password=postgres \
   postgres.databaseName=postgres \
-  postgres.readonlyPassword=ReadOnly1! \
+  postgres.readonlyPassword=ReadOnly123 \
   llm.apiKey=<your-api-key> \
   llm.baseUrl=https://<model-endpoint>/v1 \
   llm.model=<model-resource-name>
@@ -400,8 +315,8 @@ make install NAMESPACE=your-namespace \
 The Makefile supports the following configuration parameters:
 
 ```bash
-# Provider mode (required)
-PROVIDER_MODE=mcp_direct        # Options: mcp_direct (default), llama_stack
+# Provider mode
+PROVIDER_MODE=mcp_direct        # mcp_direct (default) is the only supported mode
 
 # Model selection (required)
 MODEL=nemotron                  # Options: nemotron, qwen3
@@ -425,10 +340,6 @@ llm.toolCallFormat=auto         # Options: auto (default), nemotron, openai
                                 # auto: detects from MODEL parameter
 
 # Optional components
-DEPLOY_MINIO=true              # Deploy MinIO for object storage
-minio.userId=<username>
-minio.password=<password>
-
 DEPLOY_PGADMIN=true            # Deploy pgAdmin for database management
 pgadmin.email=<email>
 pgadmin.password=<password>
@@ -443,9 +354,23 @@ pgadmin.password=<password>
 # Each deployment is controlled by a BUILD_X flag, which if set to true, triggers a cluster-side build for the component.
 
 BUILD_DATA_LOADER=true            # Build the data loader on the cluster vs. use Quay image
-BUILD_PG_AIRMAN_MCP=true          # Build the pg-airman-mcp component on the cluster
+BUILD_PG_AIRMAN_MCP=true          # Build pg-airman-mcp on the cluster (currently unsupported, see note below)
 BUILD_COPILOT_UI=true             # Build copilot-ui on the cluster
 BUILD_COPILOT_BACKEND=true        # Build copilot-backend on the cluster
+```
+
+> **Note:** Do not set `BUILD_PG_AIRMAN_MCP=true`. The quickstart is pinned to pg-airman-mcp v1.0.0, which can no longer be built from source because its pinned `pglast` dependency has been removed from PyPI. Use the pre-built Quay image (the default).
+
+For example, to deploy Nemotron in your cluster while building the data loader, backend and UI from your local source:
+
+```bash
+make install NAMESPACE=your-namespace \
+  MODEL=nemotron DEPLOY_MODEL=true PROVIDER_MODE=mcp_direct \
+  postgres.userId=postgres \
+  postgres.password=postgres \
+  postgres.readonlyPassword=ReadOnly123 \
+  postgres.databaseName=postgres \
+  BUILD_COPILOT_BACKEND=true BUILD_COPILOT_UI=true BUILD_DATA_LOADER=true
 ```
 
 ### Troubleshooting
@@ -459,17 +384,14 @@ If model pods fail to schedule with errors like "node(s) had untolerated taint":
    oc describe node <gpu-node-name> | grep Taints
    ```
 
-2. Verify tolerations in Helm chart templates:
-   - `helm/nemotron-model/templates/inferenceservice.yaml`
-   - `helm/qwen3-model/templates/inferenceservice.yaml`
+2. Add a matching entry to the `tolerations` list in the model chart's values file, then reinstall the model:
+   - `helm/nemotron-model/values.yaml`
+   - `helm/qwen3-model/values.yaml`
 
 3. Common GPU taints that need tolerations:
    - `nvidia.com/gpu=true:NoSchedule`
-   - `g5-gpu=true:NoSchedule`
-
-**Llama Stack Version Mismatch**:
-
-If Llama Stack deployment fails, verify the operator version matches requirements (0.3.5.1+rhai0). Different versions have breaking API changes.
+   - `g5-gpu=true:NoSchedule` (AWS g5 instances)
+   - `g6e-gpu=true:NoSchedule` (AWS g6e instances)
 
 **Model Loading Failures**:
 
