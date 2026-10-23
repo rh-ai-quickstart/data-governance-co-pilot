@@ -23,7 +23,7 @@ Consider a typical e-commerce enterprise where analysts need to work with Custom
 - Retention policies and compliance rules
 - Access controls that vary by data sensitivity
 
-Traditionally, this knowledge lives in static PDF documents, scattered wikis, or the minds of data owners—making discovery a manual, error-prone process. This quickstart demonstrates how to build an **agentic AI application** that bridges Large Language Models (LLMs) with your enterprise data using **EnterpriseDB's (EDB) pg-airman-mcp**, an open-source Model Context Protocol (MCP) server for PostgreSQL. While this quickstart focuses on e-commerce scenarios, the architectural pattern applies to any vertical:
+Traditionally, this knowledge lives in static PDF documents, scattered wikis, or the minds of data owners—making discovery a manual, error-prone process. This quickstart demonstrates how to build an **agentic AI application** on Red Hat® OpenShift® AI that bridges Large Language Models (LLMs) with your enterprise data using **EnterpriseDB's (EDB) pg-airman-mcp**, an open-source Model Context Protocol (MCP) server for PostgreSQL. While this quickstart focuses on e-commerce scenarios, the architectural pattern applies to any vertical:
 
 - **Healthcare**: Navigate HIPAA-protected patient records with compliance awareness
 - **FinTech**: Identify certified risk-assessment models and financial data
@@ -34,7 +34,9 @@ To learn more about how the Data Governance Co-Pilot works, read the four-part R
 
 ### See It In Action
 
-![Screnshot](docs/images/screenshot.png)
+For a walkthrough of the copilot in action, see the [Red Hat Developer blog series](https://developers.redhat.com/articles/2026/06/09/integrate-openshift-ai-and-pg-airman-mcp-server).
+
+![Screenshot](docs/images/screenshot.png)
 
 ### Architecture Diagrams
 
@@ -54,7 +56,7 @@ To learn more about how the Data Governance Co-Pilot works, read the four-part R
 
 ### Minimum Software Requirements
 
-- **OpenShift Container Platform**: Version 4.20.14 or higher
+- **Red Hat® OpenShift® Container Platform**: Version 4.20.14 or higher
 - **OpenShift AI**: Version 3.2 or higher
 - **NVIDIA GPU Operator**: Required for GPU support on OpenShift
 - **Helm**: Version 3.8 or higher
